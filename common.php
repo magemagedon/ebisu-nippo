@@ -149,7 +149,7 @@ function nav_bar() {
     $current = basename($_SERVER['PHP_SELF']);
 
     $links = ['oshirase.php' => 'お知らせ', 'dashboard.php' => 'ダッシュボード', 'index.php' => '日報一覧', 'actions.php' => 'アクション', 'calendar.php' => 'カレンダー', 'history.php' => '訪問履歴', 'chart.php' => '相場グラフ', 'todo.php' => 'ToDo', 'kj_dashboard.php' => '🏭 工場管理', 'create.php' => '新規日報'];
-    if ($kengen === '管理者') $links['master.php'] = 'マスタ管理';
+    if ($kengen === '管理者') { $links['uriage.php'] = '経営分析'; $links['master.php'] = 'マスタ管理'; }
 
     $nav = '
 <style>

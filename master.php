@@ -29,12 +29,12 @@ if ($tab === 'company' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($tab === 'factory' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     if ($action === 'add') {
-        $pdo->prepare("INSERT INTO t_factory (pk_factory_id,f_factory_name,f_zip,f_address,f_tel,f_tanto_name,f_biko,f_sort_order,f_active,f_created_at) VALUES (?,?,?,?,?,?,?,?,?,NOW())")
-            ->execute([generate_uuid(),$_POST['f_factory_name'],$_POST['f_zip'],$_POST['f_address'],$_POST['f_tel'],$_POST['f_tanto_name'],$_POST['f_biko'],$_POST['f_sort_order']??0,'有効']);
+        $pdo->prepare("INSERT INTO t_factory (pk_factory_id,f_factory_name,f_zip,f_address,f_tel,f_tanto_name,fk_madoguchi_tantosha_id,f_daihyo_email,f_biko,f_sort_order,f_active,f_created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NOW())")
+            ->execute([generate_uuid(),$_POST['f_factory_name'],$_POST['f_zip'],$_POST['f_address'],$_POST['f_tel'],$_POST['f_tanto_name'],$_POST['fk_madoguchi_tantosha_id']?:null,$_POST['f_daihyo_email']?:null,$_POST['f_biko'],$_POST['f_sort_order']??0,'有効']);
         $msg = '工場・拠点を追加しました。';
     } elseif ($action === 'edit') {
-        $pdo->prepare("UPDATE t_factory SET f_factory_name=?,f_zip=?,f_address=?,f_tel=?,f_tanto_name=?,f_biko=?,f_sort_order=?,f_active=? WHERE pk_factory_id=?")
-            ->execute([$_POST['f_factory_name'],$_POST['f_zip'],$_POST['f_address'],$_POST['f_tel'],$_POST['f_tanto_name'],$_POST['f_biko'],$_POST['f_sort_order']??0,$_POST['f_active'],$_POST['factory_id']]);
+        $pdo->prepare("UPDATE t_factory SET f_factory_name=?,f_zip=?,f_address=?,f_tel=?,f_tanto_name=?,fk_madoguchi_tantosha_id=?,f_daihyo_email=?,f_biko=?,f_sort_order=?,f_active=? WHERE pk_factory_id=?")
+            ->execute([$_POST['f_factory_name'],$_POST['f_zip'],$_POST['f_address'],$_POST['f_tel'],$_POST['f_tanto_name'],$_POST['fk_madoguchi_tantosha_id']?:null,$_POST['f_daihyo_email']?:null,$_POST['f_biko'],$_POST['f_sort_order']??0,$_POST['f_active'],$_POST['factory_id']]);
         $msg = '工場・拠点を更新しました。';
     } elseif ($action === 'delete') {
         $pdo->prepare("DELETE FROM t_factory WHERE pk_factory_id=?")->execute([$_POST['factory_id']]);
@@ -46,12 +46,12 @@ if ($tab === 'factory' && $_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($tab === 'product' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     if ($action === 'add') {
-        $pdo->prepare("INSERT INTO t_product (pk_product_id,f_product_name,f_category,f_unit,f_standard_price,f_biko,f_sort_order,f_active,f_created_at) VALUES (?,?,?,?,?,?,?,?,NOW())")
-            ->execute([generate_uuid(),$_POST['f_product_name'],$_POST['f_category'],$_POST['f_unit'],$_POST['f_standard_price']?:null,$_POST['f_biko'],$_POST['f_sort_order']??0,'有効']);
+        $pdo->prepare("INSERT INTO t_product (pk_product_id,f_code,f_product_name,f_kubun,f_category,f_segment,f_subcategory,f_unit,f_standard_price,f_biko,f_sort_order,f_active,f_created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NOW())")
+            ->execute([generate_uuid(),$_POST['f_code']??'',$_POST['f_product_name'],$_POST['f_kubun']??'商品',$_POST['f_category'],$_POST['f_segment']?:null,$_POST['f_subcategory']??'',$_POST['f_unit'],$_POST['f_standard_price']?:null,$_POST['f_biko'],$_POST['f_sort_order']??0,'有効']);
         $msg = '商品を追加しました。';
     } elseif ($action === 'edit') {
-        $pdo->prepare("UPDATE t_product SET f_product_name=?,f_category=?,f_unit=?,f_standard_price=?,f_biko=?,f_sort_order=?,f_active=? WHERE pk_product_id=?")
-            ->execute([$_POST['f_product_name'],$_POST['f_category'],$_POST['f_unit'],$_POST['f_standard_price']?:null,$_POST['f_biko'],$_POST['f_sort_order']??0,$_POST['f_active'],$_POST['product_id']]);
+        $pdo->prepare("UPDATE t_product SET f_code=?,f_product_name=?,f_kubun=?,f_category=?,f_segment=?,f_subcategory=?,f_unit=?,f_standard_price=?,f_biko=?,f_sort_order=?,f_active=? WHERE pk_product_id=?")
+            ->execute([$_POST['f_code']??'',$_POST['f_product_name'],$_POST['f_kubun']??'商品',$_POST['f_category'],$_POST['f_segment']?:null,$_POST['f_subcategory']??'',$_POST['f_unit'],$_POST['f_standard_price']?:null,$_POST['f_biko'],$_POST['f_sort_order']??0,$_POST['f_active'],$_POST['product_id']]);
         $msg = '商品を更新しました。';
     } elseif ($action === 'delete') {
         $pdo->prepare("DELETE FROM t_product WHERE pk_product_id=?")->execute([$_POST['product_id']]);
@@ -120,18 +120,20 @@ if ($tab === 'tantosha' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     if ($action === 'add') {
         $name=$_POST['f_tantosha_name']??''; $account=$_POST['f_account_name']??''; $pass=$_POST['f_password']??''; $kengen=$_POST['f_kengen_kubun']??'一般'; $busho=$_POST['fk_busho_id']?:null;
+        $email=$_POST['f_email']??''; $tel=$_POST['f_tel']??'';
         if ($name && $account && $pass) {
             try {
-                $pdo->prepare("INSERT INTO t_tantosha (pk_tantosha_id,f_tantosha_name,fk_busho_id,f_account_name,f_password_hash,f_kengen_kubun,f_zaiseki_flag,f_created_at) VALUES (?,?,?,?,SHA2(?,256),?,'有効',NOW())")
-                    ->execute([generate_uuid(),$name,$busho,$account,$pass,$kengen]);
+                $pdo->prepare("INSERT INTO t_tantosha (pk_tantosha_id,f_tantosha_name,fk_busho_id,f_account_name,f_email,f_tel,f_password_hash,f_kengen_kubun,f_zaiseki_flag,f_created_at) VALUES (?,?,?,?,?,?,SHA2(?,256),?,'有効',NOW())")
+                    ->execute([generate_uuid(),$name,$busho,$account,$email?:null,$tel?:null,$pass,$kengen]);
                 $msg = '担当者を追加しました。';
             } catch(Exception $e) { $msg='エラー：アカウント名が重複しています。'; $msg_type='danger'; }
         } else { $msg='必須項目を入力してください。'; $msg_type='danger'; }
     } elseif ($action === 'edit') {
         $tid=$_POST['tantosha_id']??''; $name=trim($_POST['f_tantosha_name']??''); $kengen=$_POST['f_kengen_kubun']??'一般'; $busho=$_POST['fk_busho_id']?:null;
+        $email=$_POST['f_email']??''; $tel=$_POST['f_tel']??'';
         if ($name && $tid) {
-            $pdo->prepare("UPDATE t_tantosha SET f_tantosha_name=?,fk_busho_id=?,f_kengen_kubun=? WHERE pk_tantosha_id=?")
-                ->execute([$name,$busho,$kengen,$tid]);
+            $pdo->prepare("UPDATE t_tantosha SET f_tantosha_name=?,fk_busho_id=?,f_kengen_kubun=?,f_email=?,f_tel=? WHERE pk_tantosha_id=?")
+                ->execute([$name,$busho,$kengen,$email?:null,$tel?:null,$tid]);
             $msg='担当者情報を更新しました。';
         }
     } elseif ($action === 'toggle') {
@@ -184,7 +186,9 @@ $prices       = $pdo->query("SELECT p.*,tr.f_torihikisaki_name,pr.f_product_name
 $jokens       = $pdo->query("SELECT j.*,t.f_torihikisaki_name FROM t_torihiki_joken j JOIN t_torihikisaki t ON j.fk_torihikisaki_id=t.pk_torihikisaki_id ORDER BY t.f_torihikisaki_name")->fetchAll();
 $bushos       = $pdo->query("SELECT * FROM t_busho ORDER BY f_sort_order,f_busho_name")->fetchAll();
 $tantoshas    = $pdo->query("SELECT t.*, b.f_busho_name FROM t_tantosha t LEFT JOIN t_busho b ON t.fk_busho_id=b.pk_busho_id ORDER BY t.f_zaiseki_flag DESC,t.f_tantosha_name")->fetchAll();
+$madoguchi_names = array_column($tantoshas, 'f_tantosha_name', 'pk_tantosha_id');
 $segments     = $pdo->query("SELECT f_segment_name FROM t_segment WHERE f_active='有効' ORDER BY f_sort_order,f_segment_name")->fetchAll(PDO::FETCH_COLUMN);
+$kubun_cls    = ['商品'=>'badge-success','サービス'=>'badge-info','仕入れ'=>'badge-warning'];
 $torihikisakis= $pdo->query("
     SELECT t.*,
         (SELECT COUNT(*) FROM t_torihikisaki_kyoten k WHERE k.fk_torihikisaki_id=t.pk_torihikisaki_id AND k.f_active='有効') AS kyoten_cnt,
@@ -281,8 +285,19 @@ echo nav_bar();
           <div class="form-group" style="margin:0"><label>郵便番号</label><input type="text" name="f_zip" class="form-control" placeholder="000-0000"></div>
           <div class="form-group" style="margin:0"><label>電話番号</label><input type="text" name="f_tel" class="form-control"></div>
           <div class="form-group" style="grid-column:1/-1;margin:0"><label>住所</label><input type="text" name="f_address" class="form-control"></div>
-          <div class="form-group" style="margin:0"><label>担当者</label><input type="text" name="f_tanto_name" class="form-control"></div>
+          <div class="form-group" style="margin:0"><label>担当者（現場・表示用）</label><input type="text" name="f_tanto_name" class="form-control"></div>
           <div class="form-group" style="margin:0"><label>表示順</label><input type="number" name="f_sort_order" class="form-control" value="0"></div>
+          <div class="form-group" style="margin:0">
+            <label>窓口担当<span style="font-size:10px;color:#888;font-weight:400">（工場管理：異常・不具合の自動アサイン先）</span></label>
+            <select name="fk_madoguchi_tantosha_id" class="form-control">
+              <option value="">未設定</option>
+              <?php foreach($tantoshas as $t): if($t['f_zaiseki_flag']!=='有効') continue; ?><option value="<?= h($t['pk_tantosha_id']) ?>"><?= h($t['f_tantosha_name']) ?></option><?php endforeach; ?>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>代表メールアドレス<span style="font-size:10px;color:#888;font-weight:400">（工場長使用・窓口担当未設定時の通知先）</span></label>
+            <input type="email" name="f_daihyo_email" class="form-control">
+          </div>
           <div class="form-group" style="grid-column:1/-1;margin:0"><label>備考</label><input type="text" name="f_biko" class="form-control"></div>
         </div>
         <div style="text-align:right;margin-top:12px"><button type="submit" class="btn btn-primary">追加する</button></div>
@@ -293,14 +308,14 @@ echo nav_bar();
     <div class="card-header">工場・拠点一覧（<?= count($factories) ?>件）</div>
     <div class="card-body" style="padding:0">
       <div class="table-wrap"><table>
-        <thead><tr><th>拠点名</th><th class="pc-only">住所</th><th class="pc-only">電話</th><th class="pc-only">担当者</th><th style="text-align:center">状態</th><th style="text-align:center">操作</th></tr></thead>
+        <thead><tr><th>拠点名</th><th class="pc-only">住所</th><th class="pc-only">電話</th><th class="pc-only">窓口担当</th><th style="text-align:center">状態</th><th style="text-align:center">操作</th></tr></thead>
         <tbody>
         <?php foreach($factories as $f): ?>
         <tr style="<?= $f['f_active']==='無効'?'opacity:0.5':'' ?>">
           <td style="font-weight:600"><?= h($f['f_factory_name']) ?></td>
           <td class="pc-only" style="font-size:12px"><?= h($f['f_address']) ?></td>
           <td class="pc-only"><?= h($f['f_tel']) ?></td>
-          <td class="pc-only"><?= h($f['f_tanto_name']) ?></td>
+          <td class="pc-only"><?= h($madoguchi_names[$f['fk_madoguchi_tantosha_id']] ?? '') ?: '<span style="color:#bbb">未設定</span>' ?></td>
           <td style="text-align:center"><span class="badge <?= $f['f_active']==='有効'?'badge-success':'badge-danger' ?>"><?= h($f['f_active']) ?></span></td>
           <td style="text-align:center;white-space:nowrap">
             <button type="button" class="btn btn-blue btn-sm" onclick="showFactoryEdit(<?= htmlspecialchars(json_encode($f),ENT_QUOTES) ?>)">編集</button>
@@ -325,11 +340,28 @@ echo nav_bar();
         <input type="hidden" name="action" value="add">
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
           <div class="form-group" style="margin:0"><label>商品名 <span style="color:#c62828">*</span></label><input type="text" name="f_product_name" class="form-control" placeholder="例：段ボール古紙" required></div>
+          <div class="form-group" style="margin:0">
+            <label>区分</label>
+            <select name="f_kubun" class="form-control">
+              <option value="商品">商品</option>
+              <option value="サービス">サービス（分析のみ・計量のみ 等）</option>
+              <option value="仕入れ">仕入れ（お客様からの仕入れ）</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>セグメント</label>
+            <select name="f_segment" class="form-control">
+              <option value="">未設定</option>
+              <?php foreach($segments as $s): ?><option value="<?= h($s) ?>"><?= h($s) ?></option><?php endforeach; ?>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0"><label>細分類</label><input type="text" name="f_subcategory" class="form-control" placeholder="例：猫砂・綿・原綿の色 等"></div>
           <div class="form-group" style="margin:0"><label>カテゴリ</label><input type="text" name="f_category" class="form-control" placeholder="例：古紙"></div>
+          <div class="form-group" style="margin:0"><label>外部コード</label><input type="text" name="f_code" class="form-control"></div>
           <div class="form-group" style="margin:0"><label>単位</label><input type="text" name="f_unit" class="form-control" placeholder="例：t" value="t"></div>
           <div class="form-group" style="margin:0"><label>標準単価（円）</label><input type="number" name="f_standard_price" class="form-control" step="100"></div>
           <div class="form-group" style="margin:0"><label>表示順</label><input type="number" name="f_sort_order" class="form-control" value="0"></div>
-          <div class="form-group" style="margin:0"><label>備考</label><input type="text" name="f_biko" class="form-control"></div>
+          <div class="form-group" style="grid-column:1/-1;margin:0"><label>備考</label><input type="text" name="f_biko" class="form-control"></div>
         </div>
         <div style="text-align:right;margin-top:12px"><button type="submit" class="btn btn-primary">追加する</button></div>
       </form>
@@ -339,12 +371,14 @@ echo nav_bar();
     <div class="card-header">商品一覧（<?= count($products) ?>件）</div>
     <div class="card-body" style="padding:0">
       <div class="table-wrap"><table>
-        <thead><tr><th>商品名</th><th>カテゴリ</th><th>単位</th><th style="text-align:right">標準単価</th><th style="text-align:center">状態</th><th style="text-align:center">操作</th></tr></thead>
+        <thead><tr><th>商品名</th><th style="text-align:center">区分</th><th class="pc-only">セグメント／細分類</th><th class="pc-only">カテゴリ</th><th>単位</th><th style="text-align:right">標準単価</th><th style="text-align:center">状態</th><th style="text-align:center">操作</th></tr></thead>
         <tbody>
         <?php foreach($products as $pr): ?>
         <tr style="<?= $pr['f_active']==='無効'?'opacity:0.5':'' ?>">
           <td style="font-weight:600"><?= h($pr['f_product_name']) ?></td>
-          <td><?= h($pr['f_category']) ?></td>
+          <td style="text-align:center"><span class="badge <?= $kubun_cls[$pr['f_kubun']]??'badge-info' ?>"><?= h($pr['f_kubun']) ?></span></td>
+          <td class="pc-only" style="font-size:12px;color:#666"><?= h($pr['f_segment']) ?><?= $pr['f_subcategory']?' / '.h($pr['f_subcategory']):'' ?></td>
+          <td class="pc-only"><?= h($pr['f_category']) ?></td>
           <td><?= h($pr['f_unit']) ?></td>
           <td style="text-align:right"><?= $pr['f_standard_price']?number_format($pr['f_standard_price']).'円':'―' ?></td>
           <td style="text-align:center"><span class="badge <?= $pr['f_active']==='有効'?'badge-success':'badge-danger' ?>"><?= h($pr['f_active']) ?></span></td>
@@ -384,7 +418,7 @@ echo nav_bar();
             <select name="fk_product_id" class="form-control" required>
               <option value="">-- 選択 --</option>
               <?php foreach($products as $pr): ?>
-              <option value="<?= h($pr['pk_product_id']) ?>"><?= h($pr['f_product_name']) ?>（標準：<?= $pr['f_standard_price']?number_format($pr['f_standard_price']).'円':'―' ?>）</option>
+              <option value="<?= h($pr['pk_product_id']) ?>">[<?= h($pr['f_kubun']) ?>] <?= h($pr['f_product_name']) ?>（標準：<?= $pr['f_standard_price']?number_format($pr['f_standard_price']).'円':'―' ?>）</option>
               <?php endforeach; ?>
             </select>
           </div>
@@ -401,11 +435,12 @@ echo nav_bar();
     <div class="card-header">単価一覧（<?= count($prices) ?>件）</div>
     <div class="card-body" style="padding:0">
       <div class="table-wrap"><table>
-        <thead><tr><th>商品名</th><th>取引先</th><th style="text-align:right">単価</th><th>適用期間</th><th>備考</th><th style="text-align:center">操作</th></tr></thead>
+        <thead><tr><th>商品名</th><th style="text-align:center">区分</th><th>取引先</th><th style="text-align:right">単価</th><th>適用期間</th><th>備考</th><th style="text-align:center">操作</th></tr></thead>
         <tbody>
         <?php foreach($prices as $pr): ?>
         <tr>
           <td style="font-weight:600"><?= h($pr['f_product_name']) ?></td>
+          <td style="text-align:center"><span class="badge <?= $kubun_cls[$pr['f_kubun']]??'badge-info' ?>"><?= h($pr['f_kubun']) ?></span></td>
           <td><?= $pr['f_torihikisaki_name']?h($pr['f_torihikisaki_name']):'<span class="badge badge-info">標準</span>' ?></td>
           <td style="text-align:right;font-weight:600;color:#1B3A6B"><?= number_format($pr['f_price']) ?>円</td>
           <td style="font-size:12px"><?= h(date('Y/m/d',strtotime($pr['f_start_date']))) ?>〜<?= $pr['f_end_date']?h(date('Y/m/d',strtotime($pr['f_end_date']))):'終了日なし' ?></td>
@@ -533,12 +568,20 @@ echo nav_bar();
               <option value="管理者">管理者</option>
             </select>
           </div>
-          <div class="form-group" style="grid-column:1/-1;margin:0">
+          <div class="form-group" style="margin:0">
             <label>部署</label>
             <select name="fk_busho_id" class="form-control">
               <option value="">未設定</option>
               <?php foreach($bushos as $b): ?><option value="<?= h($b['pk_busho_id']) ?>"><?= h($b['f_busho_name']) ?></option><?php endforeach; ?>
             </select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>メールアドレス<span style="font-size:10px;color:#888;font-weight:400">（工場管理の通知用・任意）</span></label>
+            <input type="email" name="f_email" class="form-control">
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>携帯電話番号<span style="font-size:10px;color:#888;font-weight:400">（電話発信ボタン用・任意）</span></label>
+            <input type="tel" name="f_tel" class="form-control" placeholder="090-0000-0000">
           </div>
         </div>
         <div style="text-align:right;margin-top:12px"><button type="submit" class="btn btn-primary">追加する</button></div>
@@ -549,13 +592,14 @@ echo nav_bar();
     <div class="card-header">担当者一覧</div>
     <div class="card-body" style="padding:0">
       <div class="table-wrap"><table>
-        <thead><tr><th>担当者名</th><th>アカウント名</th><th>部署</th><th style="text-align:center">権限</th><th style="text-align:center">在籍</th><th style="text-align:center">操作</th></tr></thead>
+        <thead><tr><th>担当者名</th><th>アカウント名</th><th>部署</th><th class="pc-only">メール／電話</th><th style="text-align:center">権限</th><th style="text-align:center">在籍</th><th style="text-align:center">操作</th></tr></thead>
         <tbody>
         <?php foreach($tantoshas as $t): ?>
         <tr style="<?= $t['f_zaiseki_flag']==='無効'?'opacity:0.5':'' ?>">
           <td style="font-weight:600"><?= h($t['f_tantosha_name']) ?></td>
           <td><?= h($t['f_account_name']) ?></td>
           <td><?= h($t['f_busho_name'] ?? '') ?: '<span style="color:#bbb">未設定</span>' ?></td>
+          <td class="pc-only" style="font-size:11px;color:#666"><?= h($t['f_email']) ?><?= ($t['f_email'] && $t['f_tel'])?'<br>':'' ?><?= h($t['f_tel']) ?><?= (!$t['f_email'] && !$t['f_tel'])?'<span style="color:#bbb">未設定</span>':'' ?></td>
           <td style="text-align:center"><span class="badge <?= $t['f_kengen_kubun']==='管理者'?'badge-info':($t['f_kengen_kubun']==='部門管理者'?'badge-warning':'badge-success') ?>"><?= h($t['f_kengen_kubun']) ?></span></td>
           <td style="text-align:center">
             <form method="post" style="display:inline">
@@ -668,8 +712,16 @@ echo nav_bar();
         <div class="form-group" style="margin:0"><label>郵便番号</label><input type="text" name="f_zip" id="fzip" class="form-control"></div>
         <div class="form-group" style="margin:0"><label>電話番号</label><input type="text" name="f_tel" id="ftel" class="form-control"></div>
         <div class="form-group" style="grid-column:1/-1;margin:0"><label>住所</label><input type="text" name="f_address" id="faddr" class="form-control"></div>
-        <div class="form-group" style="margin:0"><label>担当者</label><input type="text" name="f_tanto_name" id="ftanto" class="form-control"></div>
+        <div class="form-group" style="margin:0"><label>担当者（現場・表示用）</label><input type="text" name="f_tanto_name" id="ftanto" class="form-control"></div>
         <div class="form-group" style="margin:0"><label>表示順</label><input type="number" name="f_sort_order" id="fsort" class="form-control"></div>
+        <div class="form-group" style="margin:0">
+          <label>窓口担当</label>
+          <select name="fk_madoguchi_tantosha_id" id="fmadoguchi" class="form-control">
+            <option value="">未設定</option>
+            <?php foreach($tantoshas as $t): if($t['f_zaiseki_flag']!=='有効') continue; ?><option value="<?= h($t['pk_tantosha_id']) ?>"><?= h($t['f_tantosha_name']) ?></option><?php endforeach; ?>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0"><label>代表メールアドレス</label><input type="email" name="f_daihyo_email" id="fdaihyoemail" class="form-control"></div>
         <div class="form-group" style="margin:0"><label>状態</label><select name="f_active" id="factive" class="form-control"><option>有効</option><option>無効</option></select></div>
         <div class="form-group" style="grid-column:1/-1;margin:0"><label>備考</label><input type="text" name="f_biko" id="fbiko" class="form-control"></div>
       </div>
@@ -689,7 +741,24 @@ echo nav_bar();
       <input type="hidden" name="action" value="edit"><input type="hidden" name="product_id" id="prid">
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
         <div class="form-group" style="grid-column:1/-1;margin:0"><label>商品名</label><input type="text" name="f_product_name" id="prname" class="form-control"></div>
+        <div class="form-group" style="margin:0">
+          <label>区分</label>
+          <select name="f_kubun" id="prkubun" class="form-control">
+            <option value="商品">商品</option>
+            <option value="サービス">サービス</option>
+            <option value="仕入れ">仕入れ</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>セグメント</label>
+          <select name="f_segment" id="prsegment" class="form-control">
+            <option value="">未設定</option>
+            <?php foreach($segments as $s): ?><option value="<?= h($s) ?>"><?= h($s) ?></option><?php endforeach; ?>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0"><label>細分類</label><input type="text" name="f_subcategory" id="prsubcat" class="form-control"></div>
         <div class="form-group" style="margin:0"><label>カテゴリ</label><input type="text" name="f_category" id="prcat" class="form-control"></div>
+        <div class="form-group" style="margin:0"><label>外部コード</label><input type="text" name="f_code" id="prcode" class="form-control"></div>
         <div class="form-group" style="margin:0"><label>単位</label><input type="text" name="f_unit" id="prunit" class="form-control"></div>
         <div class="form-group" style="margin:0"><label>標準単価</label><input type="number" name="f_standard_price" id="prprice" class="form-control" step="100"></div>
         <div class="form-group" style="margin:0"><label>表示順</label><input type="number" name="f_sort_order" id="prsort" class="form-control"></div>
@@ -783,6 +852,8 @@ echo nav_bar();
             <?php foreach($bushos as $b): ?><option value="<?= h($b['pk_busho_id']) ?>"><?= h($b['f_busho_name']) ?></option><?php endforeach; ?>
           </select>
         </div>
+        <div class="form-group" style="margin:0"><label>メールアドレス</label><input type="email" name="f_email" id="ttemail" class="form-control"></div>
+        <div class="form-group" style="margin:0"><label>携帯電話番号</label><input type="tel" name="f_tel" id="tttel" class="form-control"></div>
       </div>
       <div style="font-size:11px;color:#888;margin-top:8px">アカウント名・パスワードはこの画面からは変更できません（パスワードは「PW変更」から）。</div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
@@ -819,6 +890,8 @@ function showFactoryEdit(f) {
   document.getElementById('faddr').value=f.f_address||'';
   document.getElementById('ftanto').value=f.f_tanto_name||'';
   document.getElementById('fsort').value=f.f_sort_order||0;
+  document.getElementById('fmadoguchi').value=f.fk_madoguchi_tantosha_id||'';
+  document.getElementById('fdaihyoemail').value=f.f_daihyo_email||'';
   document.getElementById('factive').value=f.f_active;
   document.getElementById('fbiko').value=f.f_biko||'';
   document.getElementById('factoryModal').style.display='flex';
@@ -826,7 +899,11 @@ function showFactoryEdit(f) {
 function showProductEdit(p) {
   document.getElementById('prid').value=p.pk_product_id;
   document.getElementById('prname').value=p.f_product_name;
+  document.getElementById('prkubun').value=p.f_kubun||'商品';
+  document.getElementById('prsegment').value=p.f_segment||'';
+  document.getElementById('prsubcat').value=p.f_subcategory||'';
   document.getElementById('prcat').value=p.f_category||'';
+  document.getElementById('prcode').value=p.f_code||'';
   document.getElementById('prunit').value=p.f_unit||'';
   document.getElementById('prprice').value=p.f_standard_price||'';
   document.getElementById('prsort').value=p.f_sort_order||0;
@@ -870,6 +947,8 @@ function showTantoshaEdit(t) {
   document.getElementById('ttname').value=t.f_tantosha_name;
   document.getElementById('ttkengen').value=t.f_kengen_kubun||'一般';
   document.getElementById('ttbusho').value=t.fk_busho_id||'';
+  document.getElementById('ttemail').value=t.f_email||'';
+  document.getElementById('tttel').value=t.f_tel||'';
   document.getElementById('tantoshaModal').style.display='flex';
 }
 function loadJoken(tid) {

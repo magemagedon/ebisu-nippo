@@ -20,6 +20,7 @@ if ($id) {
 }
 
 $segments = $pdo->query("SELECT f_segment_name FROM t_segment WHERE f_active='有効' ORDER BY f_sort_order,f_segment_name")->fetchAll(PDO::FETCH_COLUMN);
+$products = $pdo->query("SELECT pk_product_id, f_product_name, f_kubun FROM t_product WHERE f_active='有効' ORDER BY f_sort_order,f_product_name")->fetchAll();
 
 $errors = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -37,6 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'fk_kyoten_id'        => $_POST['fk_kyoten_id'][$i] ?? null,
             'fk_busho_id'         => $_POST['fk_busho_id'][$i] ?? null,
             'fk_saki_tantosha_id' => $_POST['fk_saki_tantosha_id'][$i] ?? null,
+            'fk_product_id'       => $_POST['fk_product_id'][$i] ?? null,
             'f_homonsakimei'      => $hm,
             'f_saki_tantosha'     => $_POST['f_saki_tantosha'][$i] ?? '',
             'f_taiou_naiyo'       => $_POST['f_taiou_naiyo'][$i] ?? '',
@@ -63,9 +65,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->prepare("INSERT INTO t_nippo_header (pk_nippo_id,fk_tantosha_id,f_date,f_biko,f_created_at,f_updated_at) VALUES (?,?,?,?,NOW(),NOW())")
                     ->execute([$nippo_id, $_SESSION['tantosha_id'], $f_date, $f_biko]);
             }
-            $stmt = $pdo->prepare("INSERT INTO t_nippo_meisai (pk_meisai_id,fk_nippo_id,fk_torihikisaki_id,fk_kyoten_id,fk_busho_id,fk_saki_tantosha_id,f_homonsakimei,f_saki_tantosha,f_taiou_naiyo,f_juchu_mikomikubun,f_jikai_action,f_jikai_yoteibi,f_furushi_soba,f_kaishu_ryo,f_tanka,f_created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())");
+            $stmt = $pdo->prepare("INSERT INTO t_nippo_meisai (pk_meisai_id,fk_nippo_id,fk_torihikisaki_id,fk_kyoten_id,fk_busho_id,fk_saki_tantosha_id,fk_product_id,f_homonsakimei,f_saki_tantosha,f_taiou_naiyo,f_juchu_mikomikubun,f_jikai_action,f_jikai_yoteibi,f_furushi_soba,f_kaishu_ryo,f_tanka,f_created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())");
             foreach ($meisai_list as $m) {
-                $stmt->execute([generate_uuid(), $nippo_id, $m['fk_torihikisaki_id']?:null, $m['fk_kyoten_id']?:null, $m['fk_busho_id']?:null, $m['fk_saki_tantosha_id']?:null, $m['f_homonsakimei'], $m['f_saki_tantosha'], $m['f_taiou_naiyo'], $m['f_juchu_mikomikubun'], $m['f_jikai_action'], $m['f_jikai_yoteibi'], $m['f_furushi_soba'], $m['f_kaishu_ryo'], $m['f_tanka']]);
+                $stmt->execute([generate_uuid(), $nippo_id, $m['fk_torihikisaki_id']?:null, $m['fk_kyoten_id']?:null, $m['fk_busho_id']?:null, $m['fk_saki_tantosha_id']?:null, $m['fk_product_id']?:null, $m['f_homonsakimei'], $m['f_saki_tantosha'], $m['f_taiou_naiyo'], $m['f_juchu_mikomikubun'], $m['f_jikai_action'], $m['f_jikai_yoteibi'], $m['f_furushi_soba'], $m['f_kaishu_ryo'], $m['f_tanka']]);
             }
             $pdo->commit();
             header('Location: index.php?msg=' . urlencode('日報を保存しました'));
@@ -85,6 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'fk_kyoten_id'        => $_POST['fk_kyoten_id'][$i] ?? '',
             'fk_busho_id'         => $_POST['fk_busho_id'][$i] ?? '',
             'fk_saki_tantosha_id' => $_POST['fk_saki_tantosha_id'][$i] ?? '',
+            'fk_product_id'       => $_POST['fk_product_id'][$i] ?? '',
             'f_torihikisaki_name' => $_POST['tori_name'][$i] ?? '',
             'f_homonsakimei'      => $hm,
             'f_saki_tantosha'     => $_POST['f_saki_tantosha'][$i] ?? '',
@@ -173,6 +176,7 @@ button[disabled]{cursor:not-allowed!important}
 
 <script>
 const SEGMENTS = <?= json_encode($segments, JSON_UNESCAPED_UNICODE) ?>;
+const PRODUCTS = <?= json_encode($products, JSON_UNESCAPED_UNICODE) ?>;
 const INIT_MEISAIS = <?= json_encode($init_meisais, JSON_UNESCAPED_UNICODE) ?>;
 const JUCHU = ['受注','見込み','継続フォロー','失注','情報収集'];
 const GOJUON = ['あ','か','さ','た','な','は','ま','や','ら','わ','A'];
@@ -249,8 +253,15 @@ function meisaiHtml(idx, m) {
         <label>次回予定日</label>
         <input type="date" name="f_jikai_yoteibi[]" class="form-control" value="${esc(m.f_jikai_yoteibi||'')}">
       </div>
+      <div class="form-group">
+        <label>対象商品<br><small style="font-weight:400;color:#888">（相場・単価を紐づける商品。任意）</small></label>
+        <select name="fk_product_id[]" class="form-control">
+          <option value="">未選択</option>
+          ${PRODUCTS.map(p=>`<option value="${esc(p.pk_product_id)}" ${(m.fk_product_id||'')===p.pk_product_id?'selected':''}>[${esc(p.f_kubun)}] ${esc(p.f_product_name)}</option>`).join('')}
+        </select>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-        <div class="form-group" style="margin:0"><label>古紙相場<br><small>（円/t）</small></label><input type="number" name="f_furushi_soba[]" class="form-control" value="${esc(m.f_furushi_soba||'')}" step="100"></div>
+        <div class="form-group" style="margin:0"><label>相場<br><small>（円/t）</small></label><input type="number" name="f_furushi_soba[]" class="form-control" value="${esc(m.f_furushi_soba||'')}" step="100"></div>
         <div class="form-group" style="margin:0"><label>回収量<br><small>（t）</small></label><input type="number" name="f_kaishu_ryo[]" class="form-control" value="${esc(m.f_kaishu_ryo||'')}" step="0.1"></div>
         <div class="form-group" style="margin:0"><label>単価<br><small>（円/t）</small></label><input type="number" name="f_tanka[]" class="form-control" value="${esc(m.f_tanka||'')}" step="100"></div>
       </div>

@@ -11,7 +11,7 @@ $stmt->execute([$id]);
 $nippo = $stmt->fetch();
 if (!$nippo) { header('Location: index.php'); exit; }
 
-$stmt = $pdo->prepare("SELECT m.*, tr.f_torihikisaki_name FROM t_nippo_meisai m LEFT JOIN t_torihikisaki tr ON m.fk_torihikisaki_id=tr.pk_torihikisaki_id WHERE m.fk_nippo_id=? ORDER BY m.f_created_at");
+$stmt = $pdo->prepare("SELECT m.*, tr.f_torihikisaki_name, p.f_product_name, p.f_kubun AS product_kubun FROM t_nippo_meisai m LEFT JOIN t_torihikisaki tr ON m.fk_torihikisaki_id=tr.pk_torihikisaki_id LEFT JOIN t_product p ON m.fk_product_id=p.pk_product_id WHERE m.fk_nippo_id=? ORDER BY m.f_created_at");
 $stmt->execute([$id]);
 $meisais = $stmt->fetchAll();
 
@@ -128,6 +128,7 @@ echo nav_bar();
           <?php endif; ?>
           <?php if($m['f_furushi_soba'] || $m['f_kaishu_ryo'] || $m['f_tanka']): ?>
           <div style="background:#fff;border:1px solid #e0e8f0;border-radius:5px;padding:8px 10px;font-size:12px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+            <?php if($m['f_product_name']): ?><div style="grid-column:1/-1"><span style="color:#888">対象商品：</span><span class="badge badge-info">[<?= h($m['product_kubun']) ?>] <?= h($m['f_product_name']) ?></span></div><?php endif; ?>
             <?php if($m['f_furushi_soba']): ?><div><span style="color:#888">相場：</span><?= number_format($m['f_furushi_soba']) ?>円/t</div><?php endif; ?>
             <?php if($m['f_kaishu_ryo']): ?><div><span style="color:#888">回収：</span><?= $m['f_kaishu_ryo'] ?>t</div><?php endif; ?>
             <?php if($m['f_tanka']): ?><div><span style="color:#888">単価：</span><?= number_format($m['f_tanka']) ?>円/t</div><?php endif; ?>

@@ -29,22 +29,26 @@ $stmt = $pdo->prepare("
 $stmt->execute($params);
 $setsubis = $stmt->fetchAll();
 
-// 次回予定日を計算し、区分に振り分け
-$overdue = []; $today = []; $week = []; $future = [];
+// 次回予定日を計算し、区分に振り分け（要件4.4-7：1ヶ月前／10日前／3日前／当日にアラート段階を分ける）
+$overdue = []; $today = []; $in3 = []; $in10 = []; $in30 = []; $future = [];
 $today_str = date('Y-m-d');
 foreach ($setsubis as $s) {
     $next = kj_next_koukan_date($pdo, $s);
     $s['next_date'] = $next;
     $s['days_left'] = $next ? (int)floor((strtotime($next) - strtotime($today_str)) / 86400) : null;
     if ($s['days_left'] === null) continue;
-    if ($s['days_left'] < 0) $overdue[] = $s;
-    elseif ($s['days_left'] === 0) $today[] = $s;
-    elseif ($s['days_left'] <= 7) $week[] = $s;
+    $dl = $s['days_left'];
+    if ($dl < 0) $overdue[] = $s;
+    elseif ($dl === 0) $today[] = $s;
+    elseif ($dl <= 3) $in3[] = $s;
+    elseif ($dl <= 10) $in10[] = $s;
+    elseif ($dl <= 30) $in30[] = $s;
     else $future[] = $s;
 }
-usort($overdue, fn($a,$b) => $a['days_left'] <=> $b['days_left']);
-usort($week, fn($a,$b) => $a['days_left'] <=> $b['days_left']);
-usort($future, fn($a,$b) => $a['days_left'] <=> $b['days_left']);
+foreach ([&$overdue, &$in3, &$in10, &$in30, &$future] as &$bucket) {
+    usort($bucket, fn($a,$b) => $a['days_left'] <=> $b['days_left']);
+}
+unset($bucket);
 
 $factories = kj_factories($pdo);
 $all_setsubi = $pdo->query("
@@ -73,8 +77,8 @@ echo nav_bar();
   <?php if($msg): ?><div class="alert alert-<?= $msg_type ?>"><?= h($msg) ?></div><?php endif; ?>
 
   <!-- サマリー -->
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
-    <?php foreach([['期限超過',count($overdue),'#b71c1c','#fdecea'],['本日',count($today),'#e65100','#fff8e1'],['今週中',count($week),'#1565c0','#e3f2fd'],['それ以降',count($future),'#2e7d32','#e6f4ea']] as [$label,$cnt,$color,$bg]): ?>
+  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:16px" class="meisai-grid-3">
+    <?php foreach([['期限超過',count($overdue),'#b71c1c','#fdecea'],['本日',count($today),'#e65100','#fff8e1'],['3日前以内',count($in3),'#c62828','#fdecea'],['10日前以内',count($in10),'#1565c0','#e3f2fd'],['1ヶ月前以内',count($in30),'#6a1b9a','#f3e5f5'],['それ以降',count($future),'#2e7d32','#e6f4ea']] as [$label,$cnt,$color,$bg]): ?>
     <div style="background:<?= $bg ?>;border:1px solid <?= $color ?>33;border-radius:8px;padding:12px;text-align:center">
       <div style="font-size:11px;color:<?= $color ?>;font-weight:600;margin-bottom:6px"><?= $label ?></div>
       <div style="font-size:28px;font-weight:700;color:<?= $color ?>"><?= $cnt ?></div>
@@ -115,7 +119,11 @@ echo nav_bar();
   </form>
 
   <?php
-  $sections = [['🔴 期限超過', $overdue, '#b71c1c'], ['🟠 本日', $today, '#e65100'], ['🔵 今週中', $week, '#1565c0'], ['🟢 それ以降', $future, '#2e7d32']];
+  $sections = [
+    ['🔴 期限超過', $overdue, '#b71c1c'], ['🟠 本日', $today, '#e65100'],
+    ['🔴 3日前以内', $in3, '#c62828'], ['🔵 10日前以内', $in10, '#1565c0'],
+    ['🟣 1ヶ月前以内', $in30, '#6a1b9a'], ['🟢 それ以降', $future, '#2e7d32'],
+  ];
   foreach ($sections as [$title, $items, $color]):
     if (empty($items)) continue;
   ?>
@@ -141,7 +149,7 @@ echo nav_bar();
   </div>
   <?php endforeach; ?>
 
-  <?php if(empty($overdue) && empty($today) && empty($week) && empty($future)): ?>
+  <?php if(empty($overdue) && empty($today) && empty($in3) && empty($in10) && empty($in30) && empty($future)): ?>
   <div class="card"><div class="card-body" style="text-align:center;color:#999;padding:40px">周期設定済みの設備がありません（設備マスタで交換周期を設定してください）</div></div>
   <?php endif; ?>
 

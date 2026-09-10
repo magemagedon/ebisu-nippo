@@ -9,15 +9,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'add') {
         $title = trim($_POST['f_title'] ?? '');
         if ($title && !empty($_POST['fk_factory_id'])) {
+            $factory_id = $_POST['fk_factory_id'];
+            // 担当者が明示指定されていなければ窓口担当を自動アサイン（要件4.4-3）
+            $assign_id = $_POST['fk_tantosha_id'] ?: null;
+            $notify = kj_resolve_notify_target($pdo, $factory_id, $_SESSION['tantosha_id']);
+            if (!$assign_id) $assign_id = $notify['tantosha_id'];
+
             $pdo->prepare("INSERT INTO t_fugu (pk_fugu_id,fk_factory_id,fk_setsubi_id,f_title,f_detail,f_taiou_keikaku,fk_tantosha_id,f_kigen_date,f_priority,f_status,f_created_at,f_updated_at)
                 VALUES (?,?,?,?,?,?,?,?,?,'未着手',NOW(),NOW())")
                 ->execute([
-                    generate_uuid(), $_POST['fk_factory_id'], $_POST['fk_setsubi_id'] ?: null, $title,
+                    generate_uuid(), $factory_id, $_POST['fk_setsubi_id'] ?: null, $title,
                     $_POST['f_detail'] ?? '', $_POST['f_taiou_keikaku'] ?? '',
-                    $_POST['fk_tantosha_id'] ?: $_SESSION['tantosha_id'], $_POST['f_kigen_date'] ?: null,
+                    $assign_id ?: $_SESSION['tantosha_id'], $_POST['f_kigen_date'] ?: null,
                     $_POST['f_priority'] ?? '中'
                 ]);
             $msg = '不具合・行動計画を登録しました。';
+
+            // 明示的に自分以外を担当に割り当てた場合、またはフォールバック先メールがある場合は通知
+            $mail_to = $notify['email'];
+            if ($mail_to) {
+                $fn = $pdo->prepare("SELECT f_factory_name FROM t_factory WHERE pk_factory_id=?"); $fn->execute([$factory_id]);
+                kj_send_mail($mail_to, "【工場管理】不具合・行動計画：{$title}",
+                    "{$fn->fetchColumn()}にて不具合・行動計画が登録されました。\n\nタイトル：{$title}\n詳細：" . ($_POST['f_detail'] ?: '（なし）') .
+                    "\n期限：" . ($_POST['f_kigen_date'] ?: '未設定') .
+                    "\n\n工場メンテナンス管理システムの「不具合・行動計画」から対応状況を更新してください。\nhttp://arsystem.jp/ebisu/kj_issue.php");
+                $msg .= '（窓口担当へ通知しました）';
+            }
         } else { $msg = '工場とタイトルは必須です。'; $msg_type = 'danger'; }
 
     } elseif ($action === 'status') {
@@ -44,7 +61,7 @@ if ($f_status)  { $where[] = 'g.f_status = ?'; $params[] = $f_status; }
 else            { $where[] = "g.f_status != '完了'"; }
 
 $stmt = $pdo->prepare("
-    SELECT g.*, f.f_factory_name, s.f_setsubi_name, sp.f_setsubi_name AS setsubi_parent_name, t.f_tantosha_name,
+    SELECT g.*, f.f_factory_name, s.f_setsubi_name, sp.f_setsubi_name AS setsubi_parent_name, t.f_tantosha_name, t.f_tel AS tantosha_tel,
            DATEDIFF(g.f_kigen_date, CURDATE()) AS days_left
     FROM t_fugu g
     JOIN t_factory f ON g.fk_factory_id = f.pk_factory_id
@@ -100,9 +117,10 @@ echo nav_bar();
         <div class="form-group"><label>対応計画</label><textarea name="f_taiou_keikaku" class="form-control" rows="2" placeholder="対応方針・手順など"></textarea></div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
           <div class="form-group" style="margin:0">
-            <label>担当者</label>
-            <select name="fk_tantosha_id" class="form-control">
-              <?php foreach($tantoshas as $t): ?><option value="<?= h($t['pk_tantosha_id']) ?>" <?= $t['pk_tantosha_id']===$_SESSION['tantosha_id']?'selected':'' ?>><?= h($t['f_tantosha_name']) ?></option><?php endforeach; ?>
+            <label>担当者<span style="font-size:10px;color:#888;font-weight:400">（工場選択時に窓口担当を自動セット・変更可）</span></label>
+            <select name="fk_tantosha_id" id="issueTantosha" class="form-control">
+              <option value="" selected>-- 窓口担当を自動アサイン --</option>
+              <?php foreach($tantoshas as $t): ?><option value="<?= h($t['pk_tantosha_id']) ?>"><?= h($t['f_tantosha_name']) ?></option><?php endforeach; ?>
             </select>
           </div>
           <div class="form-group" style="margin:0"><label>期限</label><input type="date" name="f_kigen_date" class="form-control"></div>
@@ -153,11 +171,13 @@ echo nav_bar();
             </div>
             <?php if($g['f_detail']): ?><div style="font-size:12px;color:#666;margin-top:4px"><?= h($g['f_detail']) ?></div><?php endif; ?>
             <?php if($g['f_taiou_keikaku']): ?><div style="font-size:12px;color:#1B3A6B;background:#EEF3FA;border-radius:4px;padding:4px 8px;margin-top:6px">対応計画：<?= h($g['f_taiou_keikaku']) ?></div><?php endif; ?>
-            <div style="display:flex;gap:10px;margin-top:6px;font-size:11px;color:#888;flex-wrap:wrap">
+            <div style="display:flex;gap:10px;margin-top:6px;font-size:11px;color:#888;flex-wrap:wrap;align-items:center">
               <span>👤 <?= h($g['f_tantosha_name']) ?></span>
+              <?php if($g['f_status'] !== '完了'): ?><?= kj_elapsed_badge($g['f_created_at']) ?><?php endif; ?>
               <?php if($g['f_kigen_date']): ?>
               <span style="color:<?= $color ?>;font-weight:600">📅 <?= h(date('Y/m/d', strtotime($g['f_kigen_date']))) ?>（<?= $label ?>）</span>
               <?php endif; ?>
+              <?= kj_tel_link($g['tantosha_tel']) ?>
             </div>
           </div>
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -190,6 +210,7 @@ echo nav_bar();
 </div>
 <script>
 const setsubiData = <?= json_encode($setsubis, JSON_UNESCAPED_UNICODE) ?>;
+const madoguchiData = <?= json_encode(array_column($factories, 'fk_madoguchi_tantosha_id', 'pk_factory_id'), JSON_UNESCAPED_UNICODE) ?>;
 function filterSetsubi() {
   const fid = document.getElementById('issueFactory').value;
   const sel = document.getElementById('issueSetsubi');
@@ -199,6 +220,14 @@ function filterSetsubi() {
     opt.value = s.pk_setsubi_id; opt.textContent = s.parent_name ? (s.parent_name + ' ＞ ' + s.f_setsubi_name) : s.f_setsubi_name;
     sel.appendChild(opt);
   });
+  // 担当者が未選択（自動アサイン）のままなら、この工場に窓口担当が設定されているかをセレクトの見た目で示す
+  const tantoshaSel = document.getElementById('issueTantosha');
+  if (tantoshaSel.value === '') {
+    const mid = madoguchiData[fid];
+    tantoshaSel.querySelector('option[value=""]').textContent = mid
+      ? '-- 窓口担当を自動アサイン（設定あり） --'
+      : '-- 窓口担当を自動アサイン（未設定→自分が担当に） --';
+  }
 }
 </script>
 <?= html_footer() ?>

@@ -60,6 +60,59 @@ function kj_factories(PDO $pdo) {
     return $pdo->query("SELECT * FROM t_factory WHERE f_active='有効' ORDER BY f_sort_order,f_factory_name")->fetchAll();
 }
 
+// 経過日数（不具合・行動計画：登録日からの経過日数）
+function kj_elapsed_days($created_at) {
+    if (!$created_at) return 0;
+    return (int)floor((strtotime(date('Y-m-d')) - strtotime(date('Y-m-d', strtotime($created_at)))) / 86400);
+}
+
+// 経過日数バッジ（超過アラート：既定30日で赤色注意喚起）
+function kj_elapsed_badge($created_at, $threshold = 30) {
+    $days = kj_elapsed_days($created_at);
+    if ($days >= $threshold) {
+        return "<span style='color:#c62828;font-weight:700;font-size:12px'>⚠ 経過{$days}日（{$threshold}日超）</span>";
+    }
+    $color = $days >= (int)($threshold * 0.7) ? '#e65100' : '#666';
+    return "<span style='color:{$color};font-size:12px'>経過{$days}日</span>";
+}
+
+// 電話発信リンク（スマホからワンタップ発信。番号未登録なら空文字）
+function kj_tel_link($tel, $label = '📞') {
+    if (empty($tel)) return '';
+    $clean = preg_replace('/[^0-9+]/', '', $tel);
+    if ($clean === '') return '';
+    return "<a href='tel:{$clean}' class='btn btn-blue btn-sm' style='text-decoration:none'>{$label} " . h($tel) . "</a>";
+}
+
+// 不具合・日次チェック異常の通知先を解決する（窓口担当のメール → 工場代表メール の順でフォールバック）
+// 戻り値: ['tantosha_id' => 割当担当者ID(nullable), 'email' => 通知先メール(nullable)]
+function kj_resolve_notify_target(PDO $pdo, $factory_id, $fallback_tantosha_id = null) {
+    $stmt = $pdo->prepare("
+        SELECT f.f_daihyo_email, m.pk_tantosha_id, m.f_tantosha_name, m.f_email
+        FROM t_factory f
+        LEFT JOIN t_tantosha m ON f.fk_madoguchi_tantosha_id = m.pk_tantosha_id AND m.f_zaiseki_flag='有効'
+        WHERE f.pk_factory_id = ?
+    ");
+    $stmt->execute([$factory_id]);
+    $row = $stmt->fetch();
+
+    if ($row && $row['pk_tantosha_id']) {
+        return ['tantosha_id' => $row['pk_tantosha_id'], 'email' => $row['f_email'] ?: ($row['f_daihyo_email'] ?: null)];
+    }
+    if ($row && $row['f_daihyo_email']) {
+        return ['tantosha_id' => $fallback_tantosha_id, 'email' => $row['f_daihyo_email']];
+    }
+    return ['tantosha_id' => $fallback_tantosha_id, 'email' => null];
+}
+
+// 工場メンテナンス管理モジュール共通のメール送信（宛先未登録時は何もしない。送信可否を返す）
+function kj_send_mail($to, $subject, $body) {
+    if (empty($to) || !filter_var($to, FILTER_VALIDATE_EMAIL)) return false;
+    $headers = "From: noreply@arsystem.jp\r\nContent-Type: text/plain; charset=UTF-8\r\n";
+    $subject_enc = mb_encode_mimeheader($subject, 'UTF-8');
+    return @mail($to, $subject_enc, $body, $headers);
+}
+
 // 工場メンテナンス管理モジュールのサブナビ（各画面上部に表示）
 function kj_subnav($current) {
     $items = [

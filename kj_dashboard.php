@@ -19,12 +19,14 @@ $check_rate = $factory_count > 0 ? round($total_check_days / ($factory_count * 7
 
 // ---- 未対応の不具合 ----
 $stmt = $pdo->query("
-    SELECT g.*, f.f_factory_name, DATEDIFF(g.f_kigen_date, CURDATE()) AS days_left
+    SELECT g.*, f.f_factory_name, t.f_tel AS tantosha_tel, DATEDIFF(g.f_kigen_date, CURDATE()) AS days_left
     FROM t_fugu g JOIN t_factory f ON g.fk_factory_id=f.pk_factory_id
+    JOIN t_tantosha t ON g.fk_tantosha_id=t.pk_tantosha_id
     WHERE g.f_status != '完了' ORDER BY g.f_kigen_date IS NULL, g.f_kigen_date ASC
 ");
 $open_issues = $stmt->fetchAll();
 $overdue_issues = array_filter($open_issues, fn($g) => $g['days_left'] !== null && (int)$g['days_left'] < 0);
+$stale_issues = array_filter($open_issues, fn($g) => kj_elapsed_days($g['f_created_at']) >= 30);
 
 // ---- 保守期日超過 ----
 $stmt = $pdo->query("
@@ -64,7 +66,13 @@ echo html_header('工場メンテナンス管理ダッシュボード');
 echo nav_bar();
 ?>
 <div class="container">
-  <div class="page-title">工場メンテナンス管理　｜　経営ダッシュボード</div>
+  <div class="page-title">
+    工場メンテナンス管理　｜　経営ダッシュボード
+    <?php if(($_SESSION['kengen'] ?? '') === '管理者'): ?>
+    <a href="kj_notify_overdue.php" class="btn btn-gray btn-sm" style="font-weight:400;font-size:12px;margin-left:10px" onclick="return confirm('経過30日超の未対応案件について、窓口担当へ超過アラートメールを送信します。よろしいですか？')">📧 超過アラートを今すぐ送信</a>
+    <?php endif; ?>
+  </div>
+  <?php if(isset($_GET['msg'])): ?><div class="alert alert-success"><?= h($_GET['msg']) ?></div><?php endif; ?>
   <?= kj_subnav('kj_dashboard.php') ?>
 
   <!-- KPIサマリー -->
@@ -77,7 +85,7 @@ echo nav_bar();
     <div class="card" style="margin:0"><div class="card-body" style="text-align:center;padding:16px 10px">
       <div style="font-size:11px;color:#888;margin-bottom:6px">未対応の不具合</div>
       <div style="font-size:32px;font-weight:700;color:<?= count($open_issues)>0?'#c62828':'#2e7d32' ?>"><?= count($open_issues) ?></div>
-      <div style="font-size:11px;color:#888">うち期限超過 <?= count($overdue_issues) ?> 件</div>
+      <div style="font-size:11px;color:#888">期限超過 <?= count($overdue_issues) ?> 件／経過30日超 <?= count($stale_issues) ?> 件</div>
     </div></div>
     <div class="card" style="margin:0"><div class="card-body" style="text-align:center;padding:16px 10px">
       <div style="font-size:11px;color:#888;margin-bottom:6px">保守・交換　期日超過</div>
@@ -99,16 +107,17 @@ echo nav_bar();
       <div style="text-align:center;color:#999;padding:24px">未対応の不具合はありません</div>
       <?php else: ?>
       <div class="table-wrap"><table>
-        <thead><tr><th>工場</th><th>タイトル</th><th>優先度</th><th>ステータス</th><th>期限</th><th style="text-align:center">操作</th></tr></thead>
+        <thead><tr><th>工場</th><th>タイトル</th><th>優先度</th><th>ステータス</th><th>経過</th><th>期限</th><th style="text-align:center">操作</th></tr></thead>
         <tbody>
         <?php foreach(array_slice($open_issues,0,10) as $g): [$label,$color] = kj_days_label($g['days_left']); ?>
-        <tr>
+        <tr<?= kj_elapsed_days($g['f_created_at'])>=30 ? ' style="background:#fdecea"' : '' ?>>
           <td><?= h($g['f_factory_name']) ?></td>
           <td style="font-weight:600"><?= h($g['f_title']) ?></td>
           <td><?= kj_priority_badge($g['f_priority']) ?></td>
           <td><?= kj_status_badge($g['f_status']) ?></td>
+          <td><?= kj_elapsed_badge($g['f_created_at']) ?></td>
           <td><?php if($g['f_kigen_date']): ?><span style="color:<?= $color ?>;font-weight:600;font-size:12px"><?= h(date('Y/m/d',strtotime($g['f_kigen_date']))) ?>（<?= $label ?>）</span><?php else: ?>―<?php endif; ?></td>
-          <td style="text-align:center"><a href="kj_issue.php" class="btn btn-blue btn-sm">対応する</a></td>
+          <td style="text-align:center;white-space:nowrap"><a href="kj_issue.php" class="btn btn-blue btn-sm">対応する</a> <?= kj_tel_link($g['tantosha_tel']) ?></td>
         </tr>
         <?php endforeach; ?>
         </tbody>

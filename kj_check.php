@@ -24,6 +24,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save'
             $stmt_f = $pdo->prepare("INSERT INTO t_fugu (pk_fugu_id,fk_factory_id,fk_setsubi_id,fk_check_meisai_id,f_title,f_detail,fk_tantosha_id,f_priority,f_status,f_created_at,f_updated_at) VALUES (?,?,?,?,?,?,?,?,'未着手',NOW(),NOW())");
             $stmt_name = $pdo->prepare("SELECT f_setsubi_name FROM t_setsubi WHERE pk_setsubi_id = ?");
 
+            // 窓口担当を自動アサイン（要件4.4-3）。未設定の工場は記録者を仮担当とする。
+            $notify = kj_resolve_notify_target($pdo, $factory_id, $_SESSION['tantosha_id']);
+            $factory_name = $pdo->prepare("SELECT f_factory_name FROM t_factory WHERE pk_factory_id=?");
+            $factory_name->execute([$factory_id]);
+            $fname = $factory_name->fetchColumn();
+
             $abnormal_count = 0;
             foreach ($results as $setsubi_id => $result) {
                 $comment = trim($comments[$setsubi_id] ?? '');
@@ -33,16 +39,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save'
                     $abnormal_count++;
                     $stmt_name->execute([$setsubi_id]);
                     $sname = $stmt_name->fetchColumn() ?: '設備';
+                    $title = "【日次チェック】{$sname}に異常あり";
                     $stmt_f->execute([
                         generate_uuid(), $factory_id, $setsubi_id, $meisai_id,
-                        "【日次チェック】{$sname}に異常あり",
+                        $title,
                         $comment ?: '日次チェックリストで異常が報告されました。',
-                        $_SESSION['tantosha_id'], '高'
+                        $notify['tantosha_id'], '高'
                     ]);
+                    // 窓口担当（またはフォールバック）へ即時メール通知（要件4.4-2〜4）
+                    kj_send_mail($notify['email'], "【工場管理】{$title}",
+                        "{$fname}にて日次チェックで異常が報告されました。\n\n設備：{$sname}\n内容：" . ($comment ?: '（コメントなし）') .
+                        "\n\n工場メンテナンス管理システムの「不具合・行動計画」から対応状況を更新してください。\nhttp://arsystem.jp/ebisu/kj_issue.php");
                 }
             }
             $pdo->commit();
-            $msg = "チェックを記録しました（異常 {$abnormal_count} 件）。" . ($abnormal_count ? '不具合・行動計画に自動登録しました。' : '');
+            $msg = "チェックを記録しました（異常 {$abnormal_count} 件）。" . ($abnormal_count ? '不具合・行動計画に自動登録し、窓口担当に通知しました。' : '');
             $msg_type = $abnormal_count ? 'warning' : 'success';
         } catch (Exception $e) {
             $pdo->rollBack();
