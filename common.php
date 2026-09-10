@@ -1,5 +1,5 @@
 <?php
-function html_header($title = '業務日報システム') {
+function html_header($title = '業務システム') {
     return <<<HTML
 <!DOCTYPE html>
 <html lang="ja">
@@ -148,9 +148,9 @@ function nav_bar() {
     $kengen = $_SESSION['kengen'] ?? '';
     $current = basename($_SERVER['PHP_SELF']);
 
-    // 大メニュー3本（業務日報システム／工場管理／事故報告）＋各配下のリンク
+    // 大メニュー3本（業務システム／工場管理／事故報告）＋各配下のリンク
     $categories = [
-        '業務日報システム' => [
+        '業務システム' => [
             'oshirase.php' => 'お知らせ', 'dashboard.php' => 'ダッシュボード', 'index.php' => '日報一覧',
             'actions.php' => 'アクション', 'calendar.php' => 'カレンダー', 'history.php' => '訪問履歴',
             'chart.php' => '相場グラフ', 'todo.php' => 'ToDo', 'create.php' => '新規日報',
@@ -165,16 +165,10 @@ function nav_bar() {
         ],
     ];
     if ($kengen === '管理者') {
-        $categories['業務日報システム']['uriage.php'] = '経営分析';
-        $categories['業務日報システム']['master.php'] = 'マスタ管理';
+        $categories['業務システム']['uriage.php'] = '経営分析';
+        $categories['業務システム']['master.php'] = 'マスタ管理';
     }
-    $cat_icon = ['業務日報システム' => '📋', '工場管理' => '🏭', '事故報告' => '🚨'];
-
-    // 現在ページが属する大メニューを判定（アクティブ表示用）
-    $current_cat = null;
-    foreach ($categories as $cat => $items) {
-        if (isset($items[$current])) { $current_cat = $cat; break; }
-    }
+    $cat_icon = ['業務システム' => '📋', '工場管理' => '🏭', '事故報告' => '🚨'];
 
     $nav = '
 <style>
@@ -192,14 +186,9 @@ function nav_bar() {
 .sp-menu-inner .sp-user{padding:12px 20px;color:#7FB3E8;font-size:12px;border-bottom:1px solid rgba(255,255,255,.08)}
 .sp-menu-inner .sp-logout{display:block;margin:12px 16px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:4px;padding:8px;font-size:13px;cursor:pointer;text-align:center;width:calc(100% - 32px)}
 
-/* 大メニュー（PC：ホバー／タップでドロップダウン展開） */
-.nav-cat{position:relative}
-.nav-cat-btn{color:#B8D4F0;font-size:13px;font-weight:600;padding:8px 12px;border-radius:4px;background:none;border:none;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
-.nav-cat-btn:hover,.nav-cat.active .nav-cat-btn{background:rgba(255,255,255,.12);color:#fff}
-.nav-cat-drop{display:none;position:absolute;top:100%;left:0;background:#fff;border-radius:0 0 8px 8px;box-shadow:0 4px 16px rgba(0,0,0,.18);min-width:200px;padding:6px;z-index:150}
-.nav-cat.open .nav-cat-drop,.nav-cat:hover .nav-cat-drop{display:block}
-.nav-cat-drop a{display:block;color:#1a1a2e;font-size:13px;padding:8px 12px;border-radius:5px;text-decoration:none;white-space:nowrap}
-.nav-cat-drop a:hover,.nav-cat-drop a.active{background:#EEF3FA;color:#1B3A6B;text-decoration:none}
+/* 大メニュー（PC：プルダウンにせず、カテゴリ見出し＋区切り線で常時フラット表示） */
+.nav-cat-label{color:#7FB3E8;font-size:10px;font-weight:700;padding:8px 4px 8px 10px;white-space:nowrap;display:inline-flex;align-items:center}
+.nav-cat-sep{width:1px;align-self:stretch;background:rgba(255,255,255,.15);margin:6px 2px}
 @media(max-width:600px){
   .hamburger{display:flex}
   .nav-menu,.nav-user{display:none}
@@ -207,17 +196,18 @@ function nav_bar() {
 </style>
 <nav class="nav">
   <div style="display:flex;align-items:center;gap:12px">
-    <div class="nav-brand">エビス紙料<span>業務日報システム</span></div>
+    <div class="nav-brand">エビス紙料<span>業務システム</span></div>
     <div class="nav-menu">
 ';
+    $first_cat = true;
     foreach ($categories as $cat => $items) {
-        $open = ($current_cat === $cat) ? ' active' : '';
-        $nav .= "<div class='nav-cat{$open}'><button type='button' class='nav-cat-btn'>{$cat_icon[$cat]} {$cat}<span style='font-size:9px'>▾</span></button><div class='nav-cat-drop'>";
+        if (!$first_cat) { $nav .= "<span class='nav-cat-sep'></span>"; }
+        $first_cat = false;
+        $nav .= "<span class='nav-cat-label'>{$cat_icon[$cat]} {$cat}</span>";
         foreach ($items as $file => $label) {
             $active = ($current === $file) ? ' active' : '';
-            $nav .= "<a href='{$file}' class='{$active}'>{$label}</a>";
+            $nav .= "<a href='{$file}' class='nav-link{$active}'>{$label}</a>";
         }
-        $nav .= '</div></div>';
     }
     $nav .= '
     </div>
@@ -263,26 +253,13 @@ function closeMenu() {
     document.getElementById("spMenu").classList.remove("open");
     document.body.style.overflow = "";
 }
-// PC：タップ操作（タッチデバイスでのhover代替）でも開閉できるようにする
-document.querySelectorAll(".nav-cat-btn").forEach(function(btn){
-  btn.addEventListener("click", function(e){
-    var cat = btn.closest(".nav-cat");
-    var wasOpen = cat.classList.contains("open");
-    document.querySelectorAll(".nav-cat.open").forEach(function(c){ c.classList.remove("open"); });
-    if (!wasOpen) cat.classList.add("open");
-    e.stopPropagation();
-  });
-});
-document.addEventListener("click", function(){
-  document.querySelectorAll(".nav-cat.open").forEach(function(c){ c.classList.remove("open"); });
-});
 </script>
 ';
     return $nav;
 }
 
 function html_footer() {
-    return '<div class="footer">© エビス紙料株式会社　業務日報システム</div></body></html>';
+    return '<div class="footer">© エビス紙料株式会社　業務システム</div></body></html>';
 }
 
 function status_badge($status) {

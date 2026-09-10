@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ログイン | エビス紙料 業務日報システム</title>
+<title>ログイン | エビス紙料 業務システム</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Hiragino Kaku Gothic ProN','Meiryo',sans-serif;background:#1B3A6B;min-height:100vh;display:flex;align-items:center;justify-content:center}
@@ -51,7 +51,7 @@ body{font-family:'Hiragino Kaku Gothic ProN','Meiryo',sans-serif;background:#1B3
 <div class="login-wrap">
   <div class="logo">
     <h1>エビス紙料株式会社</h1>
-    <p>業務日報システム</p>
+    <p>業務システム</p>
   </div>
   <?php if($error): ?><div class="error"><?= h($error) ?></div><?php endif; ?>
   <form method="post">
