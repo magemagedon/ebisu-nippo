@@ -17,7 +17,8 @@ $meisais = $stmt->fetchAll();
 
 $msg = '';
 $msg_type = 'success';
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_SESSION['kengen'] === '管理者') {
+$can_approve = can_manage_tantosha($pdo, $nippo['fk_tantosha_id']) && ($_SESSION['kengen'] === '管理者' || $_SESSION['kengen'] === '部門管理者');
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $can_approve) {
     $action = $_POST['action'] ?? '';
     if ($action === 'approve') {
         $pdo->prepare("UPDATE t_nippo_header SET f_kakunin_status='確認済', f_kakunin_sha_id=?, f_kakunin_datetime=NOW(), f_updated_at=NOW() WHERE pk_nippo_id=?")
@@ -144,7 +145,7 @@ echo nav_bar();
   </div>
 
   <!-- 管理者承認エリア -->
-  <?php if ($_SESSION['kengen'] === '管理者' && $nippo['f_kakunin_status'] !== '確認済'): ?>
+  <?php if ($can_approve && $nippo['f_kakunin_status'] !== '確認済'): ?>
   <div class="card">
     <div class="card-header" style="background:#2e7d32">管理者確認</div>
     <div class="card-body">

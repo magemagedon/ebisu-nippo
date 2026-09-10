@@ -90,18 +90,50 @@ if ($tab === 'joken' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+// ===================== 部署 =====================
+if ($tab === 'busho' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? '';
+    if ($action === 'add') {
+        $name = trim($_POST['f_busho_name'] ?? '');
+        if ($name) {
+            try {
+                $pdo->prepare("INSERT INTO t_busho (pk_busho_id,f_busho_name,f_biko,f_sort_order,f_active,f_created_at) VALUES (?,?,?,?,?,NOW())")
+                    ->execute([generate_uuid(),$name,$_POST['f_biko']??'',$_POST['f_sort_order']??0,'有効']);
+                $msg = '部署を追加しました。';
+            } catch(Exception $e) { $msg='エラー：同名の部署が既に存在します。'; $msg_type='danger'; }
+        } else { $msg='部署名を入力してください。'; $msg_type='danger'; }
+    } elseif ($action === 'edit') {
+        $bid=$_POST['busho_id']??''; $name=trim($_POST['f_busho_name']??'');
+        if ($name && $bid) {
+            $pdo->prepare("UPDATE t_busho SET f_busho_name=?,f_biko=?,f_sort_order=?,f_active=?,f_updated_at=NOW() WHERE pk_busho_id=?")
+                ->execute([$name,$_POST['f_biko']??'',$_POST['f_sort_order']??0,$_POST['f_active']??'有効',$bid]);
+            $msg='部署を更新しました。';
+        }
+    } elseif ($action === 'delete') {
+        $pdo->prepare("DELETE FROM t_busho WHERE pk_busho_id=?")->execute([$_POST['busho_id']]);
+        $msg='削除しました。';
+    }
+}
+
 // ===================== 担当者 =====================
 if ($tab === 'tantosha' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     if ($action === 'add') {
-        $name=$_POST['f_tantosha_name']??''; $account=$_POST['f_account_name']??''; $pass=$_POST['f_password']??''; $kengen=$_POST['f_kengen_kubun']??'一般';
+        $name=$_POST['f_tantosha_name']??''; $account=$_POST['f_account_name']??''; $pass=$_POST['f_password']??''; $kengen=$_POST['f_kengen_kubun']??'一般'; $busho=$_POST['fk_busho_id']?:null;
         if ($name && $account && $pass) {
             try {
-                $pdo->prepare("INSERT INTO t_tantosha (pk_tantosha_id,f_tantosha_name,f_account_name,f_password_hash,f_kengen_kubun,f_zaiseki_flag,f_created_at) VALUES (?,?,?,SHA2(?,256),?,'有効',NOW())")
-                    ->execute([generate_uuid(),$name,$account,$pass,$kengen]);
+                $pdo->prepare("INSERT INTO t_tantosha (pk_tantosha_id,f_tantosha_name,fk_busho_id,f_account_name,f_password_hash,f_kengen_kubun,f_zaiseki_flag,f_created_at) VALUES (?,?,?,?,SHA2(?,256),?,'有効',NOW())")
+                    ->execute([generate_uuid(),$name,$busho,$account,$pass,$kengen]);
                 $msg = '担当者を追加しました。';
             } catch(Exception $e) { $msg='エラー：アカウント名が重複しています。'; $msg_type='danger'; }
         } else { $msg='必須項目を入力してください。'; $msg_type='danger'; }
+    } elseif ($action === 'edit') {
+        $tid=$_POST['tantosha_id']??''; $name=trim($_POST['f_tantosha_name']??''); $kengen=$_POST['f_kengen_kubun']??'一般'; $busho=$_POST['fk_busho_id']?:null;
+        if ($name && $tid) {
+            $pdo->prepare("UPDATE t_tantosha SET f_tantosha_name=?,fk_busho_id=?,f_kengen_kubun=? WHERE pk_tantosha_id=?")
+                ->execute([$name,$busho,$kengen,$tid]);
+            $msg='担当者情報を更新しました。';
+        }
     } elseif ($action === 'toggle') {
         $tid=$_POST['tantosha_id']??''; $flg=$_POST['current_flag']??''; $new=$flg==='有効'?'無効':'有効';
         $pdo->prepare("UPDATE t_tantosha SET f_zaiseki_flag=? WHERE pk_tantosha_id=?")->execute([$new,$tid]);
@@ -150,7 +182,8 @@ $factories    = $pdo->query("SELECT * FROM t_factory ORDER BY f_sort_order,f_fac
 $products     = $pdo->query("SELECT * FROM t_product ORDER BY f_sort_order,f_product_name")->fetchAll();
 $prices       = $pdo->query("SELECT p.*,tr.f_torihikisaki_name,pr.f_product_name FROM t_price p LEFT JOIN t_torihikisaki tr ON p.fk_torihikisaki_id=tr.pk_torihikisaki_id JOIN t_product pr ON p.fk_product_id=pr.pk_product_id ORDER BY pr.f_product_name,tr.f_torihikisaki_name")->fetchAll();
 $jokens       = $pdo->query("SELECT j.*,t.f_torihikisaki_name FROM t_torihiki_joken j JOIN t_torihikisaki t ON j.fk_torihikisaki_id=t.pk_torihikisaki_id ORDER BY t.f_torihikisaki_name")->fetchAll();
-$tantoshas    = $pdo->query("SELECT * FROM t_tantosha ORDER BY f_zaiseki_flag DESC,f_tantosha_name")->fetchAll();
+$bushos       = $pdo->query("SELECT * FROM t_busho ORDER BY f_sort_order,f_busho_name")->fetchAll();
+$tantoshas    = $pdo->query("SELECT t.*, b.f_busho_name FROM t_tantosha t LEFT JOIN t_busho b ON t.fk_busho_id=b.pk_busho_id ORDER BY t.f_zaiseki_flag DESC,t.f_tantosha_name")->fetchAll();
 $segments     = $pdo->query("SELECT f_segment_name FROM t_segment WHERE f_active='有効' ORDER BY f_sort_order,f_segment_name")->fetchAll(PDO::FETCH_COLUMN);
 $torihikisakis= $pdo->query("
     SELECT t.*,
@@ -175,7 +208,7 @@ echo nav_bar();
   <div style="display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap">
     <?php foreach([
       'company'=>'会社情報', 'factory'=>'工場・拠点', 'product'=>'商品',
-      'price'=>'単価', 'joken'=>'取引条件', 'tantosha'=>'担当者', 'torihikisaki'=>'取引先'
+      'price'=>'単価', 'joken'=>'取引条件', 'busho'=>'部署', 'tantosha'=>'担当者', 'torihikisaki'=>'取引先'
     ] as $key=>$label): ?>
     <a href="?tab=<?= $key ?>" class="btn <?= $tab===$key?'btn-primary':'btn-gray' ?> btn-sm"><?= $label ?></a>
     <?php endforeach; ?>
@@ -437,6 +470,50 @@ echo nav_bar();
     </div>
   </div>
 
+<?php elseif($tab === 'busho'): ?>
+  <!-- ========== 部署 ========== -->
+  <div class="card">
+    <div class="card-header">部署を追加</div>
+    <div class="card-body">
+      <form method="post">
+        <input type="hidden" name="action" value="add">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="form-group" style="margin:0"><label>部署名 <span style="color:#c62828">*</span></label><input type="text" name="f_busho_name" class="form-control" placeholder="例：営業部"></div>
+          <div class="form-group" style="margin:0"><label>表示順</label><input type="number" name="f_sort_order" class="form-control" value="0"></div>
+          <div class="form-group" style="grid-column:1/-1;margin:0"><label>備考</label><input type="text" name="f_biko" class="form-control"></div>
+        </div>
+        <div style="text-align:right;margin-top:12px"><button type="submit" class="btn btn-primary">追加する</button></div>
+      </form>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-header">部署一覧</div>
+    <div class="card-body" style="padding:0">
+      <div class="table-wrap"><table>
+        <thead><tr><th>部署名</th><th class="pc-only">備考</th><th style="text-align:center">状態</th><th style="text-align:center">操作</th></tr></thead>
+        <tbody>
+        <?php if(empty($bushos)): ?>
+        <tr><td colspan="4" style="text-align:center;padding:20px;color:#999">部署が登録されていません</td></tr>
+        <?php endif; ?>
+        <?php foreach($bushos as $b): ?>
+        <tr style="<?= $b['f_active']==='無効'?'opacity:0.5':'' ?>">
+          <td style="font-weight:600"><?= h($b['f_busho_name']) ?></td>
+          <td class="pc-only" style="color:#666"><?= h($b['f_biko']) ?></td>
+          <td style="text-align:center"><span class="badge <?= $b['f_active']==='有効'?'badge-success':'badge-danger' ?>"><?= h($b['f_active']) ?></span></td>
+          <td style="text-align:center;white-space:nowrap">
+            <button type="button" class="btn btn-blue btn-sm" onclick="showBushoEdit(<?= htmlspecialchars(json_encode($b),ENT_QUOTES) ?>)">編集</button>
+            <form method="post" style="display:inline" onsubmit="return confirm('削除しますか？（所属する担当者は部署未設定になります）')">
+              <input type="hidden" name="action" value="delete"><input type="hidden" name="busho_id" value="<?= h($b['pk_busho_id']) ?>">
+              <button type="submit" class="btn btn-danger btn-sm">削除</button>
+            </form>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+
 <?php elseif($tab === 'tantosha'): ?>
   <!-- ========== 担当者 ========== -->
   <div class="card">
@@ -448,7 +525,21 @@ echo nav_bar();
           <div class="form-group" style="margin:0"><label>担当者名 <span style="color:#c62828">*</span></label><input type="text" name="f_tantosha_name" class="form-control" placeholder="例：鈴木 三郎"></div>
           <div class="form-group" style="margin:0"><label>アカウント名 <span style="color:#c62828">*</span></label><input type="text" name="f_account_name" class="form-control" placeholder="例：suzuki"></div>
           <div class="form-group" style="margin:0"><label>パスワード <span style="color:#c62828">*</span></label><input type="password" name="f_password" class="form-control"></div>
-          <div class="form-group" style="margin:0"><label>権限区分</label><select name="f_kengen_kubun" class="form-control"><option value="一般">一般</option><option value="管理者">管理者</option></select></div>
+          <div class="form-group" style="margin:0">
+            <label>権限区分</label>
+            <select name="f_kengen_kubun" class="form-control">
+              <option value="一般">一般</option>
+              <option value="部門管理者">部門管理者</option>
+              <option value="管理者">管理者</option>
+            </select>
+          </div>
+          <div class="form-group" style="grid-column:1/-1;margin:0">
+            <label>部署</label>
+            <select name="fk_busho_id" class="form-control">
+              <option value="">未設定</option>
+              <?php foreach($bushos as $b): ?><option value="<?= h($b['pk_busho_id']) ?>"><?= h($b['f_busho_name']) ?></option><?php endforeach; ?>
+            </select>
+          </div>
         </div>
         <div style="text-align:right;margin-top:12px"><button type="submit" class="btn btn-primary">追加する</button></div>
       </form>
@@ -458,20 +549,24 @@ echo nav_bar();
     <div class="card-header">担当者一覧</div>
     <div class="card-body" style="padding:0">
       <div class="table-wrap"><table>
-        <thead><tr><th>担当者名</th><th>アカウント名</th><th style="text-align:center">権限</th><th style="text-align:center">在籍</th><th style="text-align:center">操作</th></tr></thead>
+        <thead><tr><th>担当者名</th><th>アカウント名</th><th>部署</th><th style="text-align:center">権限</th><th style="text-align:center">在籍</th><th style="text-align:center">操作</th></tr></thead>
         <tbody>
         <?php foreach($tantoshas as $t): ?>
         <tr style="<?= $t['f_zaiseki_flag']==='無効'?'opacity:0.5':'' ?>">
           <td style="font-weight:600"><?= h($t['f_tantosha_name']) ?></td>
           <td><?= h($t['f_account_name']) ?></td>
-          <td style="text-align:center"><span class="badge <?= $t['f_kengen_kubun']==='管理者'?'badge-info':'badge-success' ?>"><?= h($t['f_kengen_kubun']) ?></span></td>
+          <td><?= h($t['f_busho_name'] ?? '') ?: '<span style="color:#bbb">未設定</span>' ?></td>
+          <td style="text-align:center"><span class="badge <?= $t['f_kengen_kubun']==='管理者'?'badge-info':($t['f_kengen_kubun']==='部門管理者'?'badge-warning':'badge-success') ?>"><?= h($t['f_kengen_kubun']) ?></span></td>
           <td style="text-align:center">
             <form method="post" style="display:inline">
               <input type="hidden" name="action" value="toggle"><input type="hidden" name="tantosha_id" value="<?= h($t['pk_tantosha_id']) ?>"><input type="hidden" name="current_flag" value="<?= h($t['f_zaiseki_flag']) ?>">
               <button type="submit" class="badge <?= $t['f_zaiseki_flag']==='有効'?'badge-success':'badge-danger' ?>" style="cursor:pointer;border:none"><?= h($t['f_zaiseki_flag']) ?></button>
             </form>
           </td>
-          <td style="text-align:center"><button type="button" class="btn btn-gray btn-sm" onclick="showPassForm('<?= h($t['pk_tantosha_id']) ?>','<?= h($t['f_tantosha_name']) ?>')">PW変更</button></td>
+          <td style="text-align:center;white-space:nowrap">
+            <button type="button" class="btn btn-blue btn-sm" onclick="showTantoshaEdit(<?= htmlspecialchars(json_encode($t),ENT_QUOTES) ?>)">編集</button>
+            <button type="button" class="btn btn-gray btn-sm" onclick="showPassForm('<?= h($t['pk_tantosha_id']) ?>','<?= h($t['f_tantosha_name']) ?>')">PW変更</button>
+          </td>
         </tr>
         <?php endforeach; ?>
         </tbody>
@@ -645,6 +740,59 @@ echo nav_bar();
   </div>
 </div>
 
+<!-- モーダル：部署編集 -->
+<div id="bushoModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:8px;padding:24px;width:420px;max-width:95%;max-height:90vh;overflow-y:auto">
+    <div style="font-weight:700;font-size:15px;margin-bottom:16px;color:#1B3A6B">部署を編集</div>
+    <form method="post">
+      <input type="hidden" name="action" value="edit"><input type="hidden" name="busho_id" id="bid">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-group" style="grid-column:1/-1;margin:0"><label>部署名</label><input type="text" name="f_busho_name" id="bname" class="form-control"></div>
+        <div class="form-group" style="margin:0"><label>表示順</label><input type="number" name="f_sort_order" id="bsort" class="form-control"></div>
+        <div class="form-group" style="margin:0"><label>状態</label><select name="f_active" id="bactive" class="form-control"><option>有効</option><option>無効</option></select></div>
+        <div class="form-group" style="grid-column:1/-1;margin:0"><label>備考</label><input type="text" name="f_biko" id="bbiko" class="form-control"></div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button type="button" class="btn btn-gray" onclick="document.getElementById('bushoModal').style.display='none'">キャンセル</button>
+        <button type="submit" class="btn btn-primary">更新する</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- モーダル：担当者編集 -->
+<div id="tantoshaModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:8px;padding:24px;width:420px;max-width:95%;max-height:90vh;overflow-y:auto">
+    <div style="font-weight:700;font-size:15px;margin-bottom:16px;color:#1B3A6B">担当者を編集</div>
+    <form method="post">
+      <input type="hidden" name="action" value="edit"><input type="hidden" name="tantosha_id" id="ttid">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-group" style="grid-column:1/-1;margin:0"><label>担当者名</label><input type="text" name="f_tantosha_name" id="ttname" class="form-control"></div>
+        <div class="form-group" style="margin:0">
+          <label>権限区分</label>
+          <select name="f_kengen_kubun" id="ttkengen" class="form-control">
+            <option value="一般">一般</option>
+            <option value="部門管理者">部門管理者</option>
+            <option value="管理者">管理者</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>部署</label>
+          <select name="fk_busho_id" id="ttbusho" class="form-control">
+            <option value="">未設定</option>
+            <?php foreach($bushos as $b): ?><option value="<?= h($b['pk_busho_id']) ?>"><?= h($b['f_busho_name']) ?></option><?php endforeach; ?>
+          </select>
+        </div>
+      </div>
+      <div style="font-size:11px;color:#888;margin-top:8px">アカウント名・パスワードはこの画面からは変更できません（パスワードは「PW変更」から）。</div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button type="button" class="btn btn-gray" onclick="document.getElementById('tantoshaModal').style.display='none'">キャンセル</button>
+        <button type="submit" class="btn btn-primary">更新する</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- モーダル：PW変更 -->
 <div id="passModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:8px;padding:24px;width:320px;max-width:90%">
@@ -709,6 +857,21 @@ function showPassForm(id, name) {
   document.getElementById('passName').textContent=name;
   document.getElementById('passModal').style.display='flex';
 }
+function showBushoEdit(b) {
+  document.getElementById('bid').value=b.pk_busho_id;
+  document.getElementById('bname').value=b.f_busho_name;
+  document.getElementById('bsort').value=b.f_sort_order||0;
+  document.getElementById('bactive').value=b.f_active||'有効';
+  document.getElementById('bbiko').value=b.f_biko||'';
+  document.getElementById('bushoModal').style.display='flex';
+}
+function showTantoshaEdit(t) {
+  document.getElementById('ttid').value=t.pk_tantosha_id;
+  document.getElementById('ttname').value=t.f_tantosha_name;
+  document.getElementById('ttkengen').value=t.f_kengen_kubun||'一般';
+  document.getElementById('ttbusho').value=t.fk_busho_id||'';
+  document.getElementById('tantoshaModal').style.display='flex';
+}
 function loadJoken(tid) {
   const j = jokenData[tid] || {};
   document.getElementById('j_kaishu').value=j.f_kaishu_frequency||'';
@@ -717,7 +880,7 @@ function loadJoken(tid) {
   document.getElementById('j_contract').value=j.f_contract_date||'';
   document.getElementById('j_biko').value=j.f_biko||'';
 }
-['factoryModal','productModal','torihikiModal','passModal'].forEach(id => {
+['factoryModal','productModal','torihikiModal','passModal','bushoModal','tantoshaModal'].forEach(id => {
   document.getElementById(id).addEventListener('click', function(e) {
     if(e.target===this) this.style.display='none';
   });

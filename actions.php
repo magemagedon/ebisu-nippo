@@ -8,11 +8,9 @@ $pdo = get_db();
 $where = ['m.f_jikai_yoteibi IS NOT NULL'];
 $params = [];
 
-// 一般ユーザーは自分のみ
-if ($_SESSION['kengen'] !== '管理者') {
-    $where[] = 'h.fk_tantosha_id = ?';
-    $params[] = $_SESSION['tantosha_id'];
-}
+// 一般ユーザーは自分のみ、部門管理者は自部門のみ
+[$cond, $ps] = visible_tantosha_where($pdo, 'h.fk_tantosha_id');
+if ($cond) { $where[] = $cond; array_push($params, ...$ps); }
 
 $stmt = $pdo->prepare("
     SELECT m.*, h.f_date, h.pk_nippo_id, t.f_tantosha_name,

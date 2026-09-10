@@ -23,10 +23,8 @@ $start_dow = (int)date('w',$first_day); // 0=日
 // 訪問予定（次回予定日）を取得
 $where = ['m.f_jikai_yoteibi BETWEEN ? AND ?'];
 $params = [date('Y-m-d',$first_day), date('Y-m-d',$last_day)];
-if ($_SESSION['kengen'] !== '管理者') {
-    $where[] = 'h.fk_tantosha_id = ?';
-    $params[] = $_SESSION['tantosha_id'];
-}
+[$cond, $ps] = visible_tantosha_where($pdo, 'h.fk_tantosha_id');
+if ($cond) { $where[] = $cond; array_push($params, ...$ps); }
 
 $stmt = $pdo->prepare("
     SELECT m.f_jikai_yoteibi, m.f_homonsakimei, m.f_jikai_action,

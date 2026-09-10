@@ -278,3 +278,65 @@ function map_url($row) {
     $addr = trim((string)($row['f_address'] ?? ''));
     return $addr === '' ? '' : 'https://www.google.com/maps/search/?api=1&query=' . rawurlencode($addr);
 }
+
+/* ===================== 権限（部門管理者）関連 ===================== */
+
+/** 全部門を横断して閲覧・承認できるか（管理者のみ） */
+function is_admin() {
+    return ($_SESSION['kengen'] ?? '') === '管理者';
+}
+
+/** 自部門に限り閲覧・承認できるか */
+function is_bumon_kanri() {
+    return ($_SESSION['kengen'] ?? '') === '部門管理者';
+}
+
+/**
+ * ログイン中ユーザーが閲覧・操作できる担当者IDの一覧を返す。
+ * - 管理者      : null（全件・制限なし）
+ * - 部門管理者  : 自分の所属部署に属する担当者ID一覧（部署未設定の場合は自分のみ）
+ * - 一般        : 自分のIDのみ
+ */
+function visible_tantosha_ids($pdo) {
+    static $cache = null;
+    if ($cache !== null) return $cache;
+
+    if (is_admin()) return $cache = null;
+
+    $my_id = $_SESSION['tantosha_id'] ?? '';
+
+    if (is_bumon_kanri()) {
+        $stmt = $pdo->prepare("SELECT fk_busho_id FROM t_tantosha WHERE pk_tantosha_id = ?");
+        $stmt->execute([$my_id]);
+        $busho_id = $stmt->fetchColumn();
+        if ($busho_id) {
+            $stmt2 = $pdo->prepare("SELECT pk_tantosha_id FROM t_tantosha WHERE fk_busho_id = ?");
+            $stmt2->execute([$busho_id]);
+            $ids = $stmt2->fetchAll(PDO::FETCH_COLUMN);
+            if ($ids) return $cache = $ids;
+        }
+        return $cache = [$my_id];
+    }
+
+    return $cache = [$my_id];
+}
+
+/** 指定の担当者（日報の作成者等）を、ログイン中ユーザーが閲覧・承認できるか */
+function can_manage_tantosha($pdo, $target_tantosha_id) {
+    $ids = visible_tantosha_ids($pdo);
+    if ($ids === null) return true;
+    return in_array($target_tantosha_id, $ids, true);
+}
+
+/**
+ * 担当者IDで絞り込むWHERE句の断片とパラメータを返す。
+ * 管理者の場合は絞り込みなし（空文字・空配列）。
+ * 使い方: [$cond, $ps] = visible_tantosha_where($pdo, 'h.fk_tantosha_id'); if($cond) { $where[]=$cond; array_push($params, ...$ps); }
+ */
+function visible_tantosha_where($pdo, $column) {
+    $ids = visible_tantosha_ids($pdo);
+    if ($ids === null) return ['', []];
+    if (empty($ids)) return ["{$column} = ''", []]; // 該当者なし
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    return ["{$column} IN ({$placeholders})", $ids];
+}

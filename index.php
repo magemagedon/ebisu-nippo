@@ -15,10 +15,8 @@ if ($f_from)  { $where[] = 'h.f_date >= ?'; $params[] = $f_from; }
 if ($f_to)    { $where[] = 'h.f_date <= ?'; $params[] = $f_to; }
 if ($f_tanto) { $where[] = 'h.fk_tantosha_id = ?'; $params[] = $f_tanto; }
 
-if ($_SESSION['kengen'] !== '管理者') {
-    $where[] = 'h.fk_tantosha_id = ?';
-    $params[] = $_SESSION['tantosha_id'];
-}
+[$cond, $ps] = visible_tantosha_where($pdo, 'h.fk_tantosha_id');
+if ($cond) { $where[] = $cond; array_push($params, ...$ps); }
 
 $sql = "SELECT h.*, t.f_tantosha_name,
         (SELECT COUNT(*) FROM t_nippo_meisai m WHERE m.fk_nippo_id = h.pk_nippo_id) AS meisai_count
@@ -31,7 +29,17 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $rows = $stmt->fetchAll();
 
-$tantoshas = $pdo->query("SELECT * FROM t_tantosha WHERE f_zaiseki_flag='有効' ORDER BY f_tantosha_name")->fetchAll();
+$visible_ids = visible_tantosha_ids($pdo);
+if ($visible_ids === null) {
+    $tantoshas = $pdo->query("SELECT * FROM t_tantosha WHERE f_zaiseki_flag='有効' ORDER BY f_tantosha_name")->fetchAll();
+} elseif (count($visible_ids) > 1) {
+    $ph = implode(',', array_fill(0, count($visible_ids), '?'));
+    $stmt = $pdo->prepare("SELECT * FROM t_tantosha WHERE f_zaiseki_flag='有効' AND pk_tantosha_id IN ($ph) ORDER BY f_tantosha_name");
+    $stmt->execute($visible_ids);
+    $tantoshas = $stmt->fetchAll();
+} else {
+    $tantoshas = [];
+}
 
 echo html_header('日報一覧');
 echo nav_bar();
@@ -50,7 +58,7 @@ echo nav_bar();
     <input type="date" name="f_from" value="<?= h($f_from) ?>">
     <span style="color:#666" class="pc-only">〜</span>
     <input type="date" name="f_to" value="<?= h($f_to) ?>">
-    <?php if ($_SESSION['kengen'] === '管理者'): ?>
+    <?php if ($_SESSION['kengen'] === '管理者' || $_SESSION['kengen'] === '部門管理者'): ?>
     <label>担当者</label>
     <select name="f_tanto">
       <option value="">全員</option>

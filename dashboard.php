@@ -47,16 +47,20 @@ $stmt->execute([$month_start, $month_end]);
 $juchu_stats = $stmt->fetchAll();
 
 // 最近の日報（未確認）
+$mk_where = ["h.f_kakunin_status = '未確認'"];
+$mk_params = [];
+[$mk_cond, $mk_ps] = visible_tantosha_where($pdo, 'h.fk_tantosha_id');
+if ($mk_cond) { $mk_where[] = $mk_cond; array_push($mk_params, ...$mk_ps); }
 $stmt = $pdo->prepare("
     SELECT h.*, t.f_tantosha_name,
         (SELECT COUNT(*) FROM t_nippo_meisai m WHERE m.fk_nippo_id = h.pk_nippo_id) AS meisai_count
     FROM t_nippo_header h
     LEFT JOIN t_tantosha t ON h.fk_tantosha_id = t.pk_tantosha_id
-    WHERE h.f_kakunin_status = '未確認'
+    WHERE " . implode(' AND ', $mk_where) . "
     ORDER BY h.f_date DESC
     LIMIT 5
 ");
-$stmt->execute();
+$stmt->execute($mk_params);
 $mikakunin = $stmt->fetchAll();
 
 // 今月の合計訪問件数
@@ -227,7 +231,7 @@ $oshirase_rows = $pdo->query("SELECT o.*, t.f_tantosha_name FROM t_oshirase o JO
   <?php endif; ?>
 
   <!-- 未確認日報 -->
-  <?php if($_SESSION['kengen'] === '管理者' && !empty($mikakunin)): ?>
+  <?php if(($_SESSION['kengen'] === '管理者' || $_SESSION['kengen'] === '部門管理者') && !empty($mikakunin)): ?>
   <div class="card">
     <div class="card-header" style="background:#e65100">
       未確認日報

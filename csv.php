@@ -1,5 +1,6 @@
 <?php
 require_once 'db.php';
+require_once 'common.php';
 
 $pdo = get_db();
 
@@ -11,9 +12,9 @@ $f_tanto = $_GET['f_tanto'] ?? '';
 $where  = ['h.f_date BETWEEN ? AND ?'];
 $params = [$f_from, $f_to];
 
-if ($_SESSION['kengen'] !== '管理者') {
-    $where[] = 'h.fk_tantosha_id = ?';
-    $params[] = $_SESSION['tantosha_id'];
+[$cond, $ps] = visible_tantosha_where($pdo, 'h.fk_tantosha_id');
+if ($cond) {
+    $where[] = $cond; array_push($params, ...$ps);
 } elseif ($f_tanto) {
     $where[] = 'h.fk_tantosha_id = ?';
     $params[] = $f_tanto;

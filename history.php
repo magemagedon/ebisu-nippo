@@ -8,10 +8,8 @@ $pdo = get_db();
 $where = ['1=1'];
 $params = [];
 
-if ($_SESSION['kengen'] !== '管理者') {
-    $where[] = 'h.fk_tantosha_id = ?';
-    $params[] = $_SESSION['tantosha_id'];
-}
+[$cond, $ps] = visible_tantosha_where($pdo, 'h.fk_tantosha_id');
+if ($cond) { $where[] = $cond; array_push($params, ...$ps); }
 
 $selected_id = $_GET['torihikisaki_id'] ?? '';
 $selected_name = $_GET['torihikisaki_name'] ?? '';
@@ -40,10 +38,8 @@ $histories = [];
 if ($selected_name) {
     $hwhere = ['m.f_homonsakimei = ? OR tr.f_torihikisaki_name = ?'];
     $hparams = [$selected_name, $selected_name];
-    if ($_SESSION['kengen'] !== '管理者') {
-        $hwhere[] = 'h.fk_tantosha_id = ?';
-        $hparams[] = $_SESSION['tantosha_id'];
-    }
+    [$hcond, $hps] = visible_tantosha_where($pdo, 'h.fk_tantosha_id');
+    if ($hcond) { $hwhere[] = $hcond; array_push($hparams, ...$hps); }
     $stmt = $pdo->prepare("
         SELECT m.*, h.f_date, h.pk_nippo_id, h.f_kakunin_status,
                t.f_tantosha_name, tr.f_torihikisaki_name
