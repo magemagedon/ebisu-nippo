@@ -7,6 +7,7 @@ $pdo = get_db();
 $tab = $_GET['tab'] ?? 'company';
 $msg = '';
 $msg_type = 'success';
+if (isset($_GET['csv_msg'])) { $msg = $_GET['csv_msg']; $msg_type = $_GET['csv_msg_type'] ?? 'success'; }
 
 // ===================== 会社基本情報 =====================
 if ($tab === 'company' && $_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -118,15 +119,23 @@ if ($tab === 'torihikisaki' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'add') {
         $name=trim($_POST['f_torihikisaki_name']??'');
         if ($name) {
-            $pdo->prepare("INSERT INTO t_torihikisaki (pk_torihikisaki_id,f_torihikisaki_name,f_tantosha_name,f_tel,f_address,f_biko,f_created_at) VALUES (?,?,?,?,?,?,NOW())")
-                ->execute([generate_uuid(),$name,$_POST['f_tantosha_name']??'',$_POST['f_tel']??'',$_POST['f_address']??'',$_POST['f_biko']??'']);
+            $pdo->prepare("INSERT INTO t_torihikisaki
+                (pk_torihikisaki_id,f_code,f_torihikisaki_name,f_torihikisaki_kana,f_segment,f_tantosha_name,f_zip,f_tel,f_fax,f_address,f_hp_url,f_map_url,f_kessan_url,f_biko,f_active,f_created_at)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())")
+                ->execute([generate_uuid(),$_POST['f_code']??'',$name,$_POST['f_torihikisaki_kana']??'',$_POST['f_segment']?:null,
+                    $_POST['f_tantosha_name']??'',$_POST['f_zip']??'',$_POST['f_tel']??'',$_POST['f_fax']??'',$_POST['f_address']??'',
+                    $_POST['f_hp_url']??'',$_POST['f_map_url']??'',$_POST['f_kessan_url']??'',$_POST['f_biko']??'','有効']);
             $msg='取引先を追加しました。';
         } else { $msg='取引先名を入力してください。'; $msg_type='danger'; }
     } elseif ($action === 'edit') {
         $tid=$_POST['torihikisaki_id']??''; $name=trim($_POST['f_torihikisaki_name']??'');
         if ($name && $tid) {
-            $pdo->prepare("UPDATE t_torihikisaki SET f_torihikisaki_name=?,f_tantosha_name=?,f_tel=?,f_address=?,f_biko=? WHERE pk_torihikisaki_id=?")
-                ->execute([$name,$_POST['f_tantosha_name']??'',$_POST['f_tel']??'',$_POST['f_address']??'',$_POST['f_biko']??'',$tid]);
+            $pdo->prepare("UPDATE t_torihikisaki SET
+                f_code=?,f_torihikisaki_name=?,f_torihikisaki_kana=?,f_segment=?,f_tantosha_name=?,f_zip=?,f_tel=?,f_fax=?,f_address=?,
+                f_hp_url=?,f_map_url=?,f_kessan_url=?,f_biko=?,f_active=?,f_updated_at=NOW() WHERE pk_torihikisaki_id=?")
+                ->execute([$_POST['f_code']??'',$name,$_POST['f_torihikisaki_kana']??'',$_POST['f_segment']?:null,$_POST['f_tantosha_name']??'',
+                    $_POST['f_zip']??'',$_POST['f_tel']??'',$_POST['f_fax']??'',$_POST['f_address']??'',
+                    $_POST['f_hp_url']??'',$_POST['f_map_url']??'',$_POST['f_kessan_url']??'',$_POST['f_biko']??'',$_POST['f_active']??'有効',$tid]);
             $msg='取引先を更新しました。';
         }
     } elseif ($action === 'delete') {
@@ -142,7 +151,15 @@ $products     = $pdo->query("SELECT * FROM t_product ORDER BY f_sort_order,f_pro
 $prices       = $pdo->query("SELECT p.*,tr.f_torihikisaki_name,pr.f_product_name FROM t_price p LEFT JOIN t_torihikisaki tr ON p.fk_torihikisaki_id=tr.pk_torihikisaki_id JOIN t_product pr ON p.fk_product_id=pr.pk_product_id ORDER BY pr.f_product_name,tr.f_torihikisaki_name")->fetchAll();
 $jokens       = $pdo->query("SELECT j.*,t.f_torihikisaki_name FROM t_torihiki_joken j JOIN t_torihikisaki t ON j.fk_torihikisaki_id=t.pk_torihikisaki_id ORDER BY t.f_torihikisaki_name")->fetchAll();
 $tantoshas    = $pdo->query("SELECT * FROM t_tantosha ORDER BY f_zaiseki_flag DESC,f_tantosha_name")->fetchAll();
-$torihikisakis= $pdo->query("SELECT * FROM t_torihikisaki ORDER BY f_torihikisaki_name")->fetchAll();
+$segments     = $pdo->query("SELECT f_segment_name FROM t_segment WHERE f_active='有効' ORDER BY f_sort_order,f_segment_name")->fetchAll(PDO::FETCH_COLUMN);
+$torihikisakis= $pdo->query("
+    SELECT t.*,
+        (SELECT COUNT(*) FROM t_torihikisaki_kyoten k WHERE k.fk_torihikisaki_id=t.pk_torihikisaki_id AND k.f_active='有効') AS kyoten_cnt,
+        (SELECT COUNT(*) FROM t_torihikisaki_busho b WHERE b.fk_torihikisaki_id=t.pk_torihikisaki_id AND b.f_active='有効') AS busho_cnt,
+        (SELECT COUNT(*) FROM t_saki_tantosha s WHERE s.fk_torihikisaki_id=t.pk_torihikisaki_id AND s.f_active='有効') AS tantosha_cnt
+    FROM t_torihikisaki t
+    ORDER BY (t.f_torihikisaki_kana IS NULL), t.f_torihikisaki_kana, t.f_torihikisaki_name
+")->fetchAll();
 
 echo html_header('マスタ管理');
 echo nav_bar();
@@ -469,31 +486,69 @@ echo nav_bar();
     <div class="card-body">
       <form method="post">
         <input type="hidden" name="action" value="add">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div class="form-group" style="margin:0"><label>取引先名 <span style="color:#c62828">*</span></label><input type="text" name="f_torihikisaki_name" class="form-control" required></div>
-          <div class="form-group" style="margin:0"><label>先方担当者名</label><input type="text" name="f_tantosha_name" class="form-control"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+          <div class="form-group" style="grid-column:1/-1;margin:0"><label>取引先名 <span style="color:#c62828">*</span></label><input type="text" name="f_torihikisaki_name" class="form-control" required></div>
+          <div class="form-group" style="margin:0"><label>取引先名カナ</label><input type="text" name="f_torihikisaki_kana" class="form-control" placeholder="例：タカマツシギョウ"></div>
+          <div class="form-group" style="margin:0"><label>外部コード</label><input type="text" name="f_code" class="form-control" placeholder="販売管理システムのコード等"></div>
+          <div class="form-group" style="margin:0">
+            <label>セグメント</label>
+            <select name="f_segment" class="form-control">
+              <option value="">未設定</option>
+              <?php foreach($segments as $s): ?><option value="<?= h($s) ?>"><?= h($s) ?></option><?php endforeach; ?>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0"><label>先方担当者名</label><input type="text" name="f_tantosha_name" class="form-control" placeholder="任意。詳細画面で複数登録も可"></div>
           <div class="form-group" style="margin:0"><label>電話番号</label><input type="text" name="f_tel" class="form-control"></div>
-          <div class="form-group" style="margin:0"><label>住所</label><input type="text" name="f_address" class="form-control"></div>
+          <div class="form-group" style="margin:0"><label>FAX</label><input type="text" name="f_fax" class="form-control"></div>
+          <div class="form-group" style="margin:0"><label>郵便番号</label><input type="text" name="f_zip" class="form-control" placeholder="000-0000"></div>
+          <div class="form-group" style="grid-column:2/4;margin:0"><label>住所</label><input type="text" name="f_address" class="form-control"></div>
+          <div class="form-group" style="margin:0"><label>ホームページURL</label><input type="url" name="f_hp_url" class="form-control" placeholder="https://"></div>
+          <div class="form-group" style="margin:0"><label>地図URL（空欄可）</label><input type="url" name="f_map_url" class="form-control" placeholder="空欄なら住所から自動検索"></div>
+          <div class="form-group" style="margin:0"><label>決算情報URL</label><input type="url" name="f_kessan_url" class="form-control" placeholder="https://"></div>
           <div class="form-group" style="grid-column:1/-1;margin:0"><label>備考</label><input type="text" name="f_biko" class="form-control"></div>
         </div>
         <div style="text-align:right;margin-top:12px"><button type="submit" class="btn btn-primary">追加する</button></div>
       </form>
     </div>
   </div>
+
+  <div class="card">
+    <div class="card-header">
+      CSVで一括取込
+      <a href="csv_import_torihikisaki.php?action=template" class="btn btn-gray btn-sm">テンプレートをダウンロード</a>
+    </div>
+    <div class="card-body">
+      <p style="font-size:12px;color:#666;margin-bottom:10px">
+        列構成：外部コード, 取引先名, 取引先名カナ, セグメント, 先方担当者名, 電話番号, FAX, 郵便番号, 住所, ホームページURL, 備考。<br>
+        「外部コード」が一致する行は更新、無ければ「取引先名」で一致確認のうえ新規追加します。Shift-JIS／UTF-8のどちらでも読み込めます。
+      </p>
+      <form method="post" action="csv_import_torihikisaki.php" enctype="multipart/form-data">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <input type="file" name="csv_file" accept=".csv" required>
+          <button type="submit" class="btn btn-primary btn-sm">取り込む</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-header">取引先一覧（<?= count($torihikisakis) ?>件）</div>
     <div class="card-body" style="padding:0">
       <div class="table-wrap"><table>
-        <thead><tr><th>取引先名</th><th class="pc-only">担当者</th><th class="pc-only">電話</th><th style="text-align:center">操作</th></tr></thead>
+        <thead><tr><th>取引先名</th><th class="pc-only">カナ</th><th class="pc-only">セグメント</th><th style="text-align:center" class="pc-only">支店/部署/担当</th><th class="pc-only">電話</th><th style="text-align:center">状態</th><th style="text-align:center">操作</th></tr></thead>
         <tbody>
         <?php foreach($torihikisakis as $t): ?>
-        <tr>
-          <td style="font-weight:600"><?= h($t['f_torihikisaki_name']) ?></td>
-          <td class="pc-only"><?= h($t['f_tantosha_name']) ?></td>
+        <tr style="<?= $t['f_active']==='無効'?'opacity:0.5':'' ?>">
+          <td style="font-weight:600"><?= h($t['f_torihikisaki_name']) ?><?php if($t['f_code']): ?><br><span style="font-size:11px;color:#888">[<?= h($t['f_code']) ?>]</span><?php endif; ?></td>
+          <td class="pc-only" style="font-size:12px;color:#666"><?= h($t['f_torihikisaki_kana']) ?></td>
+          <td class="pc-only"><?php if($t['f_segment']): ?><span class="badge badge-info"><?= h($t['f_segment']) ?></span><?php endif; ?></td>
+          <td class="pc-only" style="text-align:center;font-size:12px;color:#555"><?= (int)$t['kyoten_cnt'] ?> / <?= (int)$t['busho_cnt'] ?> / <?= (int)$t['tantosha_cnt'] ?></td>
           <td class="pc-only"><?= h($t['f_tel']) ?></td>
+          <td style="text-align:center"><span class="badge <?= $t['f_active']==='有効'?'badge-success':'badge-danger' ?>"><?= h($t['f_active']) ?></span></td>
           <td style="text-align:center;white-space:nowrap">
+            <a href="torihikisaki_detail.php?id=<?= h($t['pk_torihikisaki_id']) ?>" class="btn btn-success btn-sm">詳細</a>
             <button type="button" class="btn btn-blue btn-sm" onclick="showTorihikiEdit(<?= htmlspecialchars(json_encode($t),ENT_QUOTES) ?>)">編集</button>
-            <form method="post" style="display:inline" onsubmit="return confirm('削除しますか？')">
+            <form method="post" style="display:inline" onsubmit="return confirm('削除しますか？（支店・部署・担当者も削除されます）')">
               <input type="hidden" name="action" value="delete"><input type="hidden" name="torihikisaki_id" value="<?= h($t['pk_torihikisaki_id']) ?>">
               <button type="submit" class="btn btn-danger btn-sm">削除</button>
             </form>
@@ -556,15 +611,32 @@ echo nav_bar();
 
 <!-- モーダル：取引先編集 -->
 <div id="torihikiModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:1000;align-items:center;justify-content:center">
-  <div style="background:#fff;border-radius:8px;padding:24px;width:440px;max-width:95%">
+  <div style="background:#fff;border-radius:8px;padding:24px;width:560px;max-width:95%;max-height:90vh;overflow-y:auto">
     <div style="font-weight:700;font-size:15px;margin-bottom:16px;color:#1B3A6B">取引先を編集</div>
     <form method="post">
       <input type="hidden" name="action" value="edit"><input type="hidden" name="torihikisaki_id" id="tid">
-      <div class="form-group"><label>取引先名</label><input type="text" name="f_torihikisaki_name" id="tname" class="form-control" required></div>
-      <div class="form-group"><label>先方担当者名</label><input type="text" name="f_tantosha_name" id="ttanto" class="form-control"></div>
-      <div class="form-group"><label>電話番号</label><input type="text" name="f_tel" id="ttel" class="form-control"></div>
-      <div class="form-group"><label>住所</label><input type="text" name="f_address" id="taddr" class="form-control"></div>
-      <div class="form-group"><label>備考</label><input type="text" name="f_biko" id="tbiko" class="form-control"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-group" style="grid-column:1/-1;margin:0"><label>取引先名</label><input type="text" name="f_torihikisaki_name" id="tname" class="form-control" required></div>
+        <div class="form-group" style="margin:0"><label>取引先名カナ</label><input type="text" name="f_torihikisaki_kana" id="tkana" class="form-control"></div>
+        <div class="form-group" style="margin:0"><label>外部コード</label><input type="text" name="f_code" id="tcode" class="form-control"></div>
+        <div class="form-group" style="margin:0">
+          <label>セグメント</label>
+          <select name="f_segment" id="tsegment" class="form-control">
+            <option value="">未設定</option>
+            <?php foreach($segments as $s): ?><option value="<?= h($s) ?>"><?= h($s) ?></option><?php endforeach; ?>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0"><label>状態</label><select name="f_active" id="tactive" class="form-control"><option>有効</option><option>無効</option></select></div>
+        <div class="form-group" style="margin:0"><label>先方担当者名（代表）</label><input type="text" name="f_tantosha_name" id="ttanto" class="form-control"></div>
+        <div class="form-group" style="margin:0"><label>電話番号</label><input type="text" name="f_tel" id="ttel" class="form-control"></div>
+        <div class="form-group" style="margin:0"><label>FAX</label><input type="text" name="f_fax" id="tfax" class="form-control"></div>
+        <div class="form-group" style="margin:0"><label>郵便番号</label><input type="text" name="f_zip" id="tzip" class="form-control"></div>
+        <div class="form-group" style="grid-column:1/-1;margin:0"><label>住所</label><input type="text" name="f_address" id="taddr" class="form-control"></div>
+        <div class="form-group" style="margin:0"><label>ホームページURL</label><input type="url" name="f_hp_url" id="thp" class="form-control"></div>
+        <div class="form-group" style="margin:0"><label>地図URL</label><input type="url" name="f_map_url" id="tmap" class="form-control"></div>
+        <div class="form-group" style="grid-column:1/-1;margin:0"><label>決算情報URL</label><input type="url" name="f_kessan_url" id="tkessan" class="form-control"></div>
+        <div class="form-group" style="grid-column:1/-1;margin:0"><label>備考</label><input type="text" name="f_biko" id="tbiko" class="form-control"></div>
+      </div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
         <button type="button" class="btn btn-gray" onclick="document.getElementById('torihikiModal').style.display='none'">キャンセル</button>
         <button type="submit" class="btn btn-primary">更新する</button>
@@ -617,9 +689,18 @@ function showProductEdit(p) {
 function showTorihikiEdit(t) {
   document.getElementById('tid').value=t.pk_torihikisaki_id;
   document.getElementById('tname').value=t.f_torihikisaki_name;
+  document.getElementById('tkana').value=t.f_torihikisaki_kana||'';
+  document.getElementById('tcode').value=t.f_code||'';
+  document.getElementById('tsegment').value=t.f_segment||'';
+  document.getElementById('tactive').value=t.f_active||'有効';
   document.getElementById('ttanto').value=t.f_tantosha_name||'';
   document.getElementById('ttel').value=t.f_tel||'';
+  document.getElementById('tfax').value=t.f_fax||'';
+  document.getElementById('tzip').value=t.f_zip||'';
   document.getElementById('taddr').value=t.f_address||'';
+  document.getElementById('thp').value=t.f_hp_url||'';
+  document.getElementById('tmap').value=t.f_map_url||'';
+  document.getElementById('tkessan').value=t.f_kessan_url||'';
   document.getElementById('tbiko').value=t.f_biko||'';
   document.getElementById('torihikiModal').style.display='flex';
 }
