@@ -14,10 +14,11 @@ a{color:#2E75B6;text-decoration:none}
 a:hover{text-decoration:underline}
 
 /* ナビ */
-.nav{background:#1B3A6B;padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:52px;position:sticky;top:0;z-index:100;flex-wrap:wrap}
+.nav{background:#1B3A6B;position:sticky;top:0;z-index:100}
+.nav-top{padding:0 16px;display:flex;align-items:center;justify-content:space-between;height:52px}
 .nav-brand{color:#fff;font-size:15px;font-weight:700;letter-spacing:.5px;white-space:nowrap}
 .nav-brand span{color:#7FB3E8;font-size:11px;font-weight:400;margin-left:6px}
-.nav-menu{display:flex;align-items:center;gap:2px;flex-wrap:wrap}
+.nav-links{padding:4px 16px 8px;display:flex;align-items:center;gap:2px;flex-wrap:wrap;border-top:1px solid rgba(255,255,255,.08)}
 .nav-link{color:#B8D4F0;font-size:12px;padding:6px 10px;border-radius:4px;transition:background .15s;white-space:nowrap}
 .nav-link:hover,.nav-link.active{background:rgba(255,255,255,.12);color:#fff;text-decoration:none}
 .nav-user{color:#B8D4F0;font-size:12px;display:flex;align-items:center;gap:8px;white-space:nowrap}
@@ -102,11 +103,10 @@ select.form-control{background:#fff}
 
 /* ========== スマホ対応 ========== */
 @media (max-width: 600px) {
-  .nav{height:auto;padding:8px 12px;gap:6px}
+  .nav-top{padding:8px 12px;height:auto}
   .nav-brand span{display:none}
   .nav-user strong{display:none}
-  .nav-menu{gap:0}
-  .nav-link{padding:5px 8px;font-size:11px}
+  .nav-links{display:none}
 
   .container{padding:10px}
   .page-title{font-size:16px;margin-bottom:12px}
@@ -170,6 +170,13 @@ function nav_bar() {
     }
     $cat_icon = ['業務システム' => '📋', '工場管理' => '🏭', '事故報告' => '🚨'];
 
+    // 現在のページが属する大メニューを判定（サブメニュー表示・アクティブ判定用）
+    $current_cat = null;
+    foreach ($categories as $cat => $items) {
+        if (isset($items[$current])) { $current_cat = $cat; break; }
+    }
+    if ($current_cat === null) { $current_cat = array_key_first($categories); }
+
     $nav = '
 <style>
 .hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:6px;background:none;border:none}
@@ -186,42 +193,49 @@ function nav_bar() {
 .sp-menu-inner .sp-user{padding:12px 20px;color:#7FB3E8;font-size:12px;border-bottom:1px solid rgba(255,255,255,.08)}
 .sp-menu-inner .sp-logout{display:block;margin:12px 16px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:4px;padding:8px;font-size:13px;cursor:pointer;text-align:center;width:calc(100% - 32px)}
 
-/* 大メニュー（PC：プルダウンにせず、カテゴリ見出し＋区切り線で常時フラット表示） */
-.nav-cat-label{color:#7FB3E8;font-size:10px;font-weight:700;padding:8px 4px 8px 10px;white-space:nowrap;display:inline-flex;align-items:center}
-.nav-cat-sep{width:1px;align-self:stretch;background:rgba(255,255,255,.15);margin:6px 2px}
+/* 大メニュー（PC：常時3本のみ表示。入った先のサブメニューは2段目に表示） */
+.nav-cats{display:flex;align-items:center;gap:4px}
+.nav-cat-link{color:#B8D4F0;font-size:13px;font-weight:700;padding:6px 14px;border-radius:4px;white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
+.nav-cat-link:hover{background:rgba(255,255,255,.1);color:#fff;text-decoration:none}
+.nav-cat-link.active{background:rgba(255,255,255,.18);color:#fff}
 @media(max-width:600px){
   .hamburger{display:flex}
-  .nav-menu,.nav-user{display:none}
+  .nav-cats,.nav-user{display:none}
 }
 </style>
 <nav class="nav">
-  <div style="display:flex;align-items:center;gap:12px">
-    <div class="nav-brand">エビス紙料<span>業務システム</span></div>
-    <div class="nav-menu">
+  <div class="nav-top">
+    <div style="display:flex;align-items:center;gap:16px">
+      <div class="nav-brand">エビス紙料<span>業務システム</span></div>
+      <div class="nav-cats">
 ';
-    $first_cat = true;
     foreach ($categories as $cat => $items) {
-        if (!$first_cat) { $nav .= "<span class='nav-cat-sep'></span>"; }
-        $first_cat = false;
-        $nav .= "<span class='nav-cat-label'>{$cat_icon[$cat]} {$cat}</span>";
-        foreach ($items as $file => $label) {
-            $active = ($current === $file) ? ' active' : '';
-            $nav .= "<a href='{$file}' class='nav-link{$active}'>{$label}</a>";
-        }
+        $first_file = array_key_first($items);
+        $cat_active = ($cat === $current_cat) ? ' active' : '';
+        $nav .= "<a href='{$first_file}' class='nav-cat-link{$cat_active}'>{$cat_icon[$cat]} {$cat}</a>";
     }
     $nav .= '
+      </div>
     </div>
-  </div>
-  <div style="display:flex;align-items:center;gap:8px">
-    <div class="nav-user">
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="nav-user">
 ';
     $nav .= "<strong style='color:#fff'>{$name}</strong><span style='color:#B8D4F0'>（{$kengen}）</span>";
     $nav .= '
-      <form method="post" action="logout.php" style="display:inline"><button class="btn-logout" type="submit">ログアウト</button></form>
+        <form method="post" action="logout.php" style="display:inline"><button class="btn-logout" type="submit">ログアウト</button></form>
+      </div>
+      <button class="hamburger" id="hamburger" onclick="toggleMenu()">
+        <span></span><span></span><span></span>
+      </button>
     </div>
-    <button class="hamburger" id="hamburger" onclick="toggleMenu()">
-      <span></span><span></span><span></span>
-    </button>
+  </div>
+  <div class="nav-links">
+';
+    foreach ($categories[$current_cat] as $file => $label) {
+        $active = ($current === $file) ? ' active' : '';
+        $nav .= "<a href='{$file}' class='nav-link{$active}'>{$label}</a>";
+    }
+    $nav .= '
   </div>
 </nav>
 
