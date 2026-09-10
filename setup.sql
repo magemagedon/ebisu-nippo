@@ -1,0 +1,75 @@
+SET NAMES utf8mb4;
+SET time_zone = '+09:00';
+
+CREATE TABLE IF NOT EXISTS t_tantosha (
+  pk_tantosha_id VARCHAR(36) NOT NULL PRIMARY KEY,
+  f_tantosha_name VARCHAR(100) NOT NULL,
+  f_account_name VARCHAR(100) NOT NULL UNIQUE,
+  f_password_hash VARCHAR(255) NOT NULL,
+  f_kengen_kubun ENUM('一般','管理者') NOT NULL DEFAULT '一般',
+  f_zaiseki_flag ENUM('有効','無効') NOT NULL DEFAULT '有効',
+  f_created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS t_torihikisaki (
+  pk_torihikisaki_id VARCHAR(36) NOT NULL PRIMARY KEY,
+  f_torihikisaki_name VARCHAR(200) NOT NULL,
+  f_tantosha_name VARCHAR(100),
+  f_tel VARCHAR(50),
+  f_address VARCHAR(300),
+  f_biko TEXT,
+  f_created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS t_nippo_header (
+  pk_nippo_id VARCHAR(36) NOT NULL PRIMARY KEY,
+  fk_tantosha_id VARCHAR(36) NOT NULL,
+  f_date DATE NOT NULL,
+  f_kakunin_status ENUM('未確認','確認済','差し戻し') NOT NULL DEFAULT '未確認',
+  f_kakunin_sha_id VARCHAR(36),
+  f_kakunin_datetime DATETIME,
+  f_biko TEXT,
+  f_created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  f_updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (fk_tantosha_id) REFERENCES t_tantosha(pk_tantosha_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS t_nippo_meisai (
+  pk_meisai_id VARCHAR(36) NOT NULL PRIMARY KEY,
+  fk_nippo_id VARCHAR(36) NOT NULL,
+  fk_torihikisaki_id VARCHAR(36),
+  f_homonsakimei VARCHAR(200),
+  f_saki_tantosha VARCHAR(100),
+  f_taiou_naiyo TEXT,
+  f_juchu_mikomikubun ENUM('受注','見込み','継続フォロー','失注','情報収集') DEFAULT '継続フォロー',
+  f_jikai_action TEXT,
+  f_jikai_yoteibi DATE,
+  f_furushi_soba DECIMAL(10,2),
+  f_kaishu_ryo DECIMAL(10,2),
+  f_tanka DECIMAL(10,2),
+  f_created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (fk_nippo_id) REFERENCES t_nippo_header(pk_nippo_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO t_tantosha VALUES
+('11111111-1111-1111-1111-111111111111','山田 太郎','yamada',SHA2('password123',256),'管理者','有効',NOW()),
+('22222222-2222-2222-2222-222222222222','佐藤 花子','sato',SHA2('password123',256),'一般','有効',NOW()),
+('33333333-3333-3333-3333-333333333333','田中 次郎','tanaka',SHA2('password123',256),'一般','有効',NOW());
+
+INSERT INTO t_torihikisaki VALUES
+('aaaa0001-0000-0000-0000-000000000001','〇〇紙業株式会社','鈴木一郎','087-XXX-0001','香川県高松市〇〇町1-1','主要取引先',NOW()),
+('aaaa0002-0000-0000-0000-000000000002','△△商事株式会社','田村二郎','087-XXX-0002','香川県高松市△△町2-2','',NOW()),
+('aaaa0003-0000-0000-0000-000000000003','□□工業株式会社','中村三郎','087-XXX-0003','香川県丸亀市□□町3-3','',NOW());
+
+INSERT INTO t_nippo_header VALUES
+('hdr00001-0000-0000-0000-000000000001','11111111-1111-1111-1111-111111111111','2026-08-18','確認済','11111111-1111-1111-1111-111111111111','2026-08-18 17:00:00','特になし',NOW(),NOW()),
+('hdr00002-0000-0000-0000-000000000002','22222222-2222-2222-2222-222222222222','2026-08-18','未確認',NULL,NULL,'',NOW(),NOW()),
+('hdr00003-0000-0000-0000-000000000003','11111111-1111-1111-1111-111111111111','2026-08-17','差し戻し','11111111-1111-1111-1111-111111111111','2026-08-17 18:00:00','訪問先名を正確に記入してください',NOW(),NOW()),
+('hdr00004-0000-0000-0000-000000000004','33333333-3333-3333-3333-333333333333','2026-08-17','確認済','11111111-1111-1111-1111-111111111111','2026-08-17 17:30:00','',NOW(),NOW()),
+('hdr00005-0000-0000-0000-000000000005','22222222-2222-2222-2222-222222222222','2026-08-15','未確認',NULL,NULL,'',NOW(),NOW());
+
+INSERT INTO t_nippo_meisai VALUES
+('mei00001-0000-0000-0000-000000000001','hdr00001-0000-0000-0000-000000000001','aaaa0001-0000-0000-0000-000000000001','〇〇紙業株式会社','鈴木一郎','古紙相場の確認と回収量の調整を実施','受注','次回見積提出','2026-08-25',12500,5.2,12000,'2026-08-18 09:00:00'),
+('mei00002-0000-0000-0000-000000000002','hdr00001-0000-0000-0000-000000000001','aaaa0002-0000-0000-0000-000000000002','△△商事株式会社','田村二郎','RPF製品の価格交渉','見込み','資料送付後フォロー','2026-08-22',NULL,3.0,11500,'2026-08-18 11:00:00'),
+('mei00003-0000-0000-0000-000000000003','hdr00002-0000-0000-0000-000000000002','aaaa0003-0000-0000-0000-000000000003','□□工業株式会社','中村三郎','新規提案訪問。関心あり','継続フォロー','再訪問','2026-08-28',NULL,NULL,NULL,'2026-08-18 13:00:00'),
+('mei00004-0000-0000-0000-000000000004','hdr00004-0000-0000-0000-000000000004','aaaa0001-0000-0000-0000-000000000001','〇〇紙業株式会社','鈴木一郎','定期回収ルートの確認','受注','次回定期訪問','2026-09-01',12300,8.0,12000,'2026-08-17 10:00:00');

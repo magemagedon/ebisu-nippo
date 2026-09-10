@@ -1,0 +1,10 @@
+# 認証情報（サーバー・ローカルで個別に配置）
+db.php
+# Composer 依存（composer install で復元）
+vendor/
+# アップロードファイル
+uploads/*
+!uploads/.gitkeep
+# OS/エディタ
+.DS_Store
+*.log
