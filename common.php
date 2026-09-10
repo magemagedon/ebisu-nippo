@@ -189,8 +189,13 @@ function nav_bar() {
 .sp-menu-inner{background:#1B3A6B;padding:8px 0;max-height:calc(100vh - 52px);overflow-y:auto}
 .sp-menu-inner a{display:block;color:#B8D4F0;padding:10px 20px 10px 32px;font-size:14px;border-bottom:1px solid rgba(255,255,255,.08);text-decoration:none}
 .sp-menu-inner a:hover,.sp-menu-inner a.active{background:rgba(255,255,255,.12);color:#fff}
-.sp-menu-inner .sp-cat{padding:12px 20px 6px;color:#7FB3E8;font-size:11px;font-weight:700;letter-spacing:.5px}
 .sp-menu-inner .sp-user{padding:12px 20px;color:#7FB3E8;font-size:12px;border-bottom:1px solid rgba(255,255,255,.08)}
+/* スマホ：大メニューはアコーディオン（現在のカテゴリだけ開いた状態で表示、他は畳んでおく） */
+.sp-cat-header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;color:#7FB3E8;font-size:13px;font-weight:700;letter-spacing:.5px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.08)}
+.sp-cat-header .chevron{transition:transform .2s;font-size:11px}
+.sp-cat-header.open .chevron{transform:rotate(90deg)}
+.sp-cat-items{max-height:0;overflow:hidden;transition:max-height .25s ease}
+.sp-cat-items.open{max-height:1000px}
 .sp-menu-inner .sp-logout{display:block;margin:12px 16px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:4px;padding:8px;font-size:13px;cursor:pointer;text-align:center;width:calc(100% - 32px)}
 
 /* 大メニュー（PC：常時3本のみ表示。入った先のサブメニューは2段目に表示） */
@@ -244,12 +249,17 @@ function nav_bar() {
   <div class="sp-menu-inner" onclick="event.stopPropagation()">
 ';
     $nav .= "<div class='sp-user'>{$name}（{$kengen}）</div>";
+    $cat_i = 0;
     foreach ($categories as $cat => $items) {
-        $nav .= "<div class='sp-cat'>{$cat_icon[$cat]} {$cat}</div>";
+        $open = ($cat === $current_cat) ? ' open' : '';
+        $nav .= "<div class='sp-cat-header{$open}' id='sph-{$cat_i}' onclick='toggleSpCat({$cat_i})'>{$cat_icon[$cat]} {$cat}<span class='chevron'>▶</span></div>";
+        $nav .= "<div class='sp-cat-items{$open}' id='spc-{$cat_i}'>";
         foreach ($items as $file => $label) {
             $active = ($current === $file) ? ' active' : '';
             $nav .= "<a href='{$file}' class='{$active}'>{$label}</a>";
         }
+        $nav .= "</div>";
+        $cat_i++;
     }
     $nav .= '
     <form method="post" action="logout.php"><button class="sp-logout" type="submit">ログアウト</button></form>
@@ -266,6 +276,10 @@ function closeMenu() {
     document.getElementById("hamburger").classList.remove("open");
     document.getElementById("spMenu").classList.remove("open");
     document.body.style.overflow = "";
+}
+function toggleSpCat(i) {
+    document.getElementById("sph-" + i).classList.toggle("open");
+    document.getElementById("spc-" + i).classList.toggle("open");
 }
 </script>
 ';
