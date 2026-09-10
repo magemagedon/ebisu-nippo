@@ -36,15 +36,17 @@ try {
     // 明細コピー
     $stmt = $pdo->prepare("
         INSERT INTO t_nippo_meisai
-        (pk_meisai_id, fk_nippo_id, fk_torihikisaki_id, f_homonsakimei, f_saki_tantosha,
+        (pk_meisai_id, fk_nippo_id, fk_torihikisaki_id, fk_kyoten_id, fk_busho_id, fk_saki_tantosha_id,
+         f_homonsakimei, f_saki_tantosha,
          f_taiou_naiyo, f_juchu_mikomikubun, f_jikai_action, f_jikai_yoteibi,
          f_furushi_soba, f_kaishu_ryo, f_tanka, f_created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
     ");
     foreach ($meisais as $m) {
         $stmt->execute([
             generate_uuid(), $new_id,
-            $m['fk_torihikisaki_id'], $m['f_homonsakimei'], $m['f_saki_tantosha'],
+            $m['fk_torihikisaki_id'], $m['fk_kyoten_id'] ?? null, $m['fk_busho_id'] ?? null, $m['fk_saki_tantosha_id'] ?? null,
+            $m['f_homonsakimei'], $m['f_saki_tantosha'],
             $m['f_taiou_naiyo'], $m['f_juchu_mikomikubun'], $m['f_jikai_action'],
             null, // 次回予定日はリセット
             $m['f_furushi_soba'], $m['f_kaishu_ryo'], $m['f_tanka']

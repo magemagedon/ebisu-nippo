@@ -244,3 +244,37 @@ function juchu_badge($status) {
 function h($str) {
     return htmlspecialchars((string)$str, ENT_QUOTES, 'UTF-8');
 }
+
+/**
+ * 検索用カナ正規化
+ * ひらがな→全角カタカナ、半角カナ→全角、全角英数→半角、空白除去、英字は大文字化
+ */
+function normalize_kana($str) {
+    $s = mb_convert_kana(trim((string)$str), 'KVCas', 'UTF-8');
+    $s = preg_replace('/[\s　]+/u', '', $s);
+    return mb_strtoupper($s, 'UTF-8');
+}
+
+/** 五十音 行 → 先頭文字の正規表現（全角カタカナ） */
+function gojuon_rows() {
+    return [
+        'あ' => '^[ァ-オヴ]',
+        'か' => '^[カ-ゴヵヶ]',
+        'さ' => '^[サ-ゾ]',
+        'た' => '^[タ-ド]',
+        'な' => '^[ナ-ノ]',
+        'は' => '^[ハ-ポ]',
+        'ま' => '^[マ-モ]',
+        'や' => '^[ャ-ヨ]',
+        'ら' => '^[ラ-ロ]',
+        'わ' => '^[ヮ-ン]',
+        'A'  => '^[A-Z0-9]',
+    ];
+}
+
+/** 取引先の地図URL（未設定なら住所からGoogleマップ検索） */
+function map_url($row) {
+    if (!empty($row['f_map_url'])) return $row['f_map_url'];
+    $addr = trim((string)($row['f_address'] ?? ''));
+    return $addr === '' ? '' : 'https://www.google.com/maps/search/?api=1&query=' . rawurlencode($addr);
+}
