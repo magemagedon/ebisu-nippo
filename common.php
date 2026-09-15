@@ -294,9 +294,29 @@ function html_footer() {
 }
 
 function status_badge($status) {
-    $map = ['確認済' => 'badge-success', '未確認' => 'badge-warning', '差し戻し' => 'badge-danger'];
+    $map = [
+        '確認済' => 'badge-success', '未確認' => 'badge-warning', '差し戻し' => 'badge-danger',
+        '申請中' => 'badge-warning', '上長確認済' => 'badge-info', '管理確認済' => 'badge-success',
+    ];
     $cls = $map[$status] ?? 'badge-info';
     return "<span class='badge {$cls}'>{$status}</span>";
+}
+
+// システム共通のメール送信（宛先未登録・不正な場合は何もせずfalseを返す）
+function system_send_mail($to, $subject, $body) {
+    if (empty($to) || !filter_var($to, FILTER_VALIDATE_EMAIL)) return false;
+    $headers = "From: noreply@arsystem.jp\r\nContent-Type: text/plain; charset=UTF-8\r\n";
+    $subject_enc = mb_encode_mimeheader($subject, 'UTF-8');
+    return @mail($to, $subject_enc, $body, $headers);
+}
+
+// 権限区分に該当する在籍中ユーザーのメールアドレス一覧を返す（メール未登録者は除外）
+function mail_targets_by_kengen(PDO $pdo, array $kengens) {
+    if (empty($kengens)) return [];
+    $in = implode(',', array_fill(0, count($kengens), '?'));
+    $stmt = $pdo->prepare("SELECT f_email FROM t_tantosha WHERE f_kengen_kubun IN ($in) AND f_zaiseki_flag='有効' AND f_email IS NOT NULL AND f_email <> ''");
+    $stmt->execute($kengens);
+    return $stmt->fetchAll(PDO::FETCH_COLUMN);
 }
 
 function juchu_badge($status) {
