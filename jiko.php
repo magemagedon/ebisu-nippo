@@ -23,6 +23,12 @@ function jiko_get(PDO $pdo, $id) {
     return $stmt->fetch();
 }
 
+// 発生時刻プルダウン（時・分）から "HH:MM" を組み立てる。どちらも未選択なら null。
+function jiko_combine_time($h, $m) {
+    if ($h === '' || $h === null || $m === '' || $m === null) return null;
+    return sprintf('%02d:%02d', (int)$h, (int)$m);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
@@ -32,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare("INSERT INTO t_jiko (pk_jiko_id,f_date,f_time,fk_factory_id,f_place_text,f_kubun,f_title,f_detail,fk_tantosha_id,f_status,f_created_at,f_updated_at)
                 VALUES (?,?,?,?,?,?,?,?,?,'申請中',NOW(),NOW())")
                 ->execute([
-                    generate_uuid(), $_POST['f_date'], $_POST['f_time'] ?: null,
+                    generate_uuid(), $_POST['f_date'], jiko_combine_time($_POST['f_time_h'] ?? '', $_POST['f_time_m'] ?? ''),
                     $_POST['fk_factory_id'] ?: null, $_POST['f_place_text'] ?? '',
                     $_POST['f_kubun'] ?? 'その他', $title, $_POST['f_detail'] ?? '',
                     $_SESSION['tantosha_id'],
@@ -116,7 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     f_saishinsei_at=NOW(), f_updated_at=NOW()
                 WHERE pk_jiko_id=?")
                 ->execute([
-                    $_POST['f_date'], $_POST['f_time'] ?: null, $_POST['fk_factory_id'] ?: null,
+                    $_POST['f_date'], jiko_combine_time($_POST['f_time_h'] ?? '', $_POST['f_time_m'] ?? ''), $_POST['fk_factory_id'] ?: null,
                     $_POST['f_place_text'] ?? '', $_POST['f_kubun'] ?? 'その他', $title, $_POST['f_detail'] ?? '',
                     $row['pk_jiko_id'],
                 ]);
@@ -147,6 +153,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'delete' && $is_admin) {
         $pdo->prepare("DELETE FROM t_jiko WHERE pk_jiko_id=?")->execute([$_POST['jiko_id'] ?? '']);
         $msg = '削除しました。';
+    }
+}
+
+// 発生時刻プルダウン（時：0-23／分：5分刻み）のoptionを出力
+function jiko_time_options($name, $selected = '') {
+    echo "<option value=''>--</option>";
+    if ($name === 'h') {
+        for ($i = 0; $i < 24; $i++) {
+            $v = sprintf('%02d', $i);
+            echo "<option value='{$v}'" . ($selected === $v ? ' selected' : '') . ">{$v}</option>";
+        }
+    } else {
+        for ($i = 0; $i < 60; $i += 5) {
+            $v = sprintf('%02d', $i);
+            echo "<option value='{$v}'" . ($selected === $v ? ' selected' : '') . ">{$v}</option>";
+        }
     }
 }
 
@@ -220,7 +242,14 @@ echo nav_bar();
         <input type="hidden" name="action" value="add">
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px" class="meisai-grid-3">
           <div class="form-group" style="margin:0"><label>発生日 <span style="color:#c62828">*</span></label><input type="date" name="f_date" class="form-control" value="<?= date('Y-m-d') ?>" required></div>
-          <div class="form-group" style="margin:0"><label>発生時刻</label><input type="time" name="f_time" class="form-control"></div>
+          <div class="form-group" style="margin:0"><label>発生時刻</label>
+            <div style="display:flex;gap:4px;align-items:center">
+              <select name="f_time_h" class="form-control"><?php jiko_time_options('h') ?></select>
+              <span style="font-size:12px;color:#666">時</span>
+              <select name="f_time_m" class="form-control"><?php jiko_time_options('m') ?></select>
+              <span style="font-size:12px;color:#666">分</span>
+            </div>
+          </div>
           <div class="form-group" style="margin:0">
             <label>事故種別</label>
             <select name="f_kubun" class="form-control">
@@ -360,7 +389,14 @@ echo nav_bar();
       <input type="hidden" name="jiko_id" id="rs_jiko_id">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="form-group" style="margin:0"><label>発生日 <span style="color:#c62828">*</span></label><input type="date" name="f_date" id="rs_date" class="form-control" required></div>
-        <div class="form-group" style="margin:0"><label>発生時刻</label><input type="time" name="f_time" id="rs_time" class="form-control"></div>
+        <div class="form-group" style="margin:0"><label>発生時刻</label>
+          <div style="display:flex;gap:4px;align-items:center">
+            <select name="f_time_h" id="rs_time_h" class="form-control"><?php jiko_time_options('h') ?></select>
+            <span style="font-size:12px;color:#666">時</span>
+            <select name="f_time_m" id="rs_time_m" class="form-control"><?php jiko_time_options('m') ?></select>
+            <span style="font-size:12px;color:#666">分</span>
+          </div>
+        </div>
         <div class="form-group" style="margin:0">
           <label>事故種別</label>
           <select name="f_kubun" id="rs_kubun" class="form-control">
@@ -398,7 +434,9 @@ function closeSashimodoshi() { document.getElementById('sashimodoshiModal').styl
 function openResubmit(j) {
     document.getElementById('rs_jiko_id').value = j.pk_jiko_id;
     document.getElementById('rs_date').value = j.f_date;
-    document.getElementById('rs_time').value = j.f_time || '';
+    var tp = (j.f_time || '').split(':');
+    document.getElementById('rs_time_h').value = tp[0] || '';
+    document.getElementById('rs_time_m').value = tp[1] || '';
     document.getElementById('rs_kubun').value = j.f_kubun;
     document.getElementById('rs_factory').value = j.fk_factory_id || '';
     document.getElementById('rs_place').value = j.f_place_text || '';
