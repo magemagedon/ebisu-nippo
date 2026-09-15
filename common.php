@@ -148,28 +148,30 @@ function nav_bar() {
     $kengen = $_SESSION['kengen'] ?? '';
     $current = basename($_SERVER['PHP_SELF']);
 
-    // 大メニュー3本（業務システム／工場管理／事故報告）＋各配下のリンク
+    // 大メニュー（業務システム／経営／工場管理／事故報告）＋各配下のリンク
     $categories = [
         '業務システム' => [
             'oshirase.php' => 'お知らせ', 'dashboard.php' => 'ダッシュボード', 'index.php' => '日報一覧',
             'actions.php' => 'アクション', 'calendar.php' => 'カレンダー', 'history.php' => '訪問履歴',
             'chart.php' => '相場グラフ', 'todo.php' => 'ToDo', 'create.php' => '新規日報',
         ],
-        '工場管理' => [
-            'kj_dashboard.php' => 'ダッシュボード', 'kj_equipment.php' => '設備マスタ', 'kj_check.php' => '日次チェック',
-            'kj_issue.php' => '不具合・行動計画', 'kj_maintenance.php' => '保守・交換スケジュール',
-            'kj_patrol.php' => '安全パトロール', 'kj_process.php' => '工程表連動ビュー',
-        ],
-        '事故報告' => [
-            'jiko.php' => '事故報告一覧・登録',
-        ],
     ];
     if ($kengen === '管理者') {
-        $categories['業務システム']['uriage.php'] = '経営分析';
-        $categories['業務システム']['keiei.php'] = '経営数値集計';
         $categories['業務システム']['master.php'] = 'マスタ管理';
+        $categories['経営'] = [
+            'uriage.php' => '経営分析',
+            'keiei.php' => '経営数値集計',
+        ];
     }
-    $cat_icon = ['業務システム' => '📋', '工場管理' => '🏭', '事故報告' => '🚨'];
+    $categories['工場管理'] = [
+        'kj_dashboard.php' => 'ダッシュボード', 'kj_equipment.php' => '設備マスタ', 'kj_check.php' => '日次チェック',
+        'kj_issue.php' => '不具合・行動計画', 'kj_maintenance.php' => '保守・交換スケジュール',
+        'kj_patrol.php' => '安全パトロール', 'kj_process.php' => '工程表連動ビュー',
+    ];
+    $categories['事故報告'] = [
+        'jiko.php' => '事故報告一覧・登録',
+    ];
+    $cat_icon = ['業務システム' => '📋', '経営' => '📊', '工場管理' => '🏭', '事故報告' => '🚨'];
 
     // 現在のページが属する大メニューを判定（サブメニュー表示・アクティブ判定用）
     $current_cat = null;
