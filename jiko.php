@@ -29,20 +29,37 @@ function jiko_combine_time($h, $m) {
     return sprintf('%02d:%02d', (int)$h, (int)$m);
 }
 
+// 労災（様式23号 下書き用）の被災者情報をPOSTから取り出す
+function jiko_rosai_fields() {
+    return [
+        trim($_POST['f_higaisha_name'] ?? '') ?: null,
+        in_array($_POST['f_higaisha_sei'] ?? '', ['男', '女'], true) ? $_POST['f_higaisha_sei'] : null,
+        $_POST['f_higaisha_seinengappi'] ?: null,
+        trim($_POST['f_higaisha_shokushu'] ?? '') ?: null,
+        trim($_POST['f_keiken_kikan'] ?? '') ?: null,
+        trim($_POST['f_shoubyou_bui'] ?? '') ?: null,
+        trim($_POST['f_shoubyou_mei'] ?? '') ?: null,
+        in_array($_POST['f_kyugyo_kubun'] ?? '', ['休業見込み', '死亡'], true) ? $_POST['f_kyugyo_kubun'] : null,
+        ($_POST['f_kyugyo_nissu'] ?? '') !== '' ? (int)$_POST['f_kyugyo_nissu'] : null,
+    ];
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
     if ($action === 'add') {
         $title = trim($_POST['f_title'] ?? '');
         if ($title && !empty($_POST['f_date'])) {
-            $pdo->prepare("INSERT INTO t_jiko (pk_jiko_id,f_date,f_time,fk_factory_id,f_place_text,f_kubun,f_title,f_detail,fk_tantosha_id,f_status,f_created_at,f_updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,'申請中',NOW(),NOW())")
-                ->execute([
+            $pdo->prepare("INSERT INTO t_jiko (pk_jiko_id,f_date,f_time,fk_factory_id,f_place_text,f_kubun,f_title,f_detail,fk_tantosha_id,f_status,
+                    f_higaisha_name,f_higaisha_sei,f_higaisha_seinengappi,f_higaisha_shokushu,f_keiken_kikan,f_shoubyou_bui,f_shoubyou_mei,f_kyugyo_kubun,f_kyugyo_nissu,
+                    f_created_at,f_updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?,'申請中',?,?,?,?,?,?,?,?,?,NOW(),NOW())")
+                ->execute(array_merge([
                     generate_uuid(), $_POST['f_date'], jiko_combine_time($_POST['f_time_h'] ?? '', $_POST['f_time_m'] ?? ''),
                     $_POST['fk_factory_id'] ?: null, $_POST['f_place_text'] ?? '',
                     $_POST['f_kubun'] ?? 'その他', $title, $_POST['f_detail'] ?? '',
                     $_SESSION['tantosha_id'],
-                ]);
+                ], jiko_rosai_fields()));
             $msg = '事故報告を登録しました。上長による確認をお待ちください。';
 
             $to_list = mail_targets_by_kengen($pdo, ['部門管理者', '管理者']);
@@ -116,16 +133,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($can_edit && $title && !empty($_POST['f_date'])) {
             $pdo->prepare("UPDATE t_jiko SET
                     f_date=?, f_time=?, fk_factory_id=?, f_place_text=?, f_kubun=?, f_title=?, f_detail=?,
+                    f_higaisha_name=?, f_higaisha_sei=?, f_higaisha_seinengappi=?, f_higaisha_shokushu=?, f_keiken_kikan=?, f_shoubyou_bui=?, f_shoubyou_mei=?, f_kyugyo_kubun=?, f_kyugyo_nissu=?,
                     f_status='申請中',
                     f_joucho_kakunin_flag='未確認', fk_joucho_kakunin_tantosha_id=NULL, f_joucho_kakunin_at=NULL,
                     f_kanri_kakunin_flag='未確認', fk_kanri_kakunin_tantosha_id=NULL, f_kanri_kakunin_at=NULL,
                     f_saishinsei_at=NOW(), f_updated_at=NOW()
                 WHERE pk_jiko_id=?")
-                ->execute([
+                ->execute(array_merge([
                     $_POST['f_date'], jiko_combine_time($_POST['f_time_h'] ?? '', $_POST['f_time_m'] ?? ''), $_POST['fk_factory_id'] ?: null,
                     $_POST['f_place_text'] ?? '', $_POST['f_kubun'] ?? 'その他', $title, $_POST['f_detail'] ?? '',
-                    $row['pk_jiko_id'],
-                ]);
+                ], jiko_rosai_fields(), [$row['pk_jiko_id']]));
             $msg = '修正のうえ再申請しました。上長による確認をお待ちください。';
 
             $to_list = mail_targets_by_kengen($pdo, ['部門管理者', '管理者']);
@@ -260,7 +277,7 @@ echo nav_bar();
           </div>
           <div class="form-group" style="margin:0">
             <label>事故種別</label>
-            <select name="f_kubun" class="form-control">
+            <select name="f_kubun" class="form-control" onchange="toggleRosaiFields(this.value,'add_rosai')">
               <option value="労災">労災</option>
               <option value="交通事故">交通事故</option>
               <option value="設備事故">設備事故</option>
@@ -279,6 +296,26 @@ echo nav_bar();
           <div class="form-group" style="grid-column:1/-1;margin:0"><label>件名 <span style="color:#c62828">*</span></label><input type="text" name="f_title" class="form-control" placeholder="例：構内でフォークリフトと接触" required></div>
           <div class="form-group" style="grid-column:1/-1;margin:0"><label>詳細</label><textarea name="f_detail" class="form-control" rows="3" placeholder="発生状況、けがの有無、初期対応 等"></textarea></div>
         </div>
+
+        <div id="add_rosai" style="display:none;margin-top:14px;padding:12px;background:#fff8f6;border:1px solid #f0d0c8;border-radius:6px">
+          <div style="font-size:12px;font-weight:700;color:#c62828;margin-bottom:8px">🩹 被災者情報（労災報告書の下書き用。分かる範囲でご入力ください）</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px" class="meisai-grid-3">
+            <div class="form-group" style="margin:0"><label>被災者氏名</label><input type="text" name="f_higaisha_name" class="form-control"></div>
+            <div class="form-group" style="margin:0"><label>性別</label>
+              <select name="f_higaisha_sei" class="form-control"><option value="">-- 未選択 --</option><option value="男">男</option><option value="女">女</option></select>
+            </div>
+            <div class="form-group" style="margin:0"><label>生年月日</label><input type="date" name="f_higaisha_seinengappi" class="form-control"></div>
+            <div class="form-group" style="margin:0"><label>職種</label><input type="text" name="f_higaisha_shokushu" class="form-control" placeholder="例：機械オペレーター"></div>
+            <div class="form-group" style="margin:0"><label>経験期間</label><input type="text" name="f_keiken_kikan" class="form-control" placeholder="例：3年2ヶ月"></div>
+            <div class="form-group" style="margin:0"><label>傷病の部位</label><input type="text" name="f_shoubyou_bui" class="form-control" placeholder="例：右手中指"></div>
+            <div class="form-group" style="margin:0"><label>傷病名</label><input type="text" name="f_shoubyou_mei" class="form-control" placeholder="例：挫創傷"></div>
+            <div class="form-group" style="margin:0"><label>休業／死亡の別</label>
+              <select name="f_kyugyo_kubun" class="form-control"><option value="">-- 未選択 --</option><option value="休業見込み">休業見込み</option><option value="死亡">死亡</option></select>
+            </div>
+            <div class="form-group" style="margin:0"><label>休業見込み日数</label><input type="number" name="f_kyugyo_nissu" class="form-control" min="0" placeholder="日数"></div>
+          </div>
+        </div>
+
         <div style="text-align:right;margin-top:12px"><button type="submit" class="btn btn-primary">報告する</button></div>
       </form>
     </div>
@@ -318,6 +355,7 @@ echo nav_bar();
               <?php if($j['f_place_text']): ?>／<?= h($j['f_place_text']) ?><?php endif; ?>
               ／👤 報告者：<?= h($j['f_tantosha_name']) ?>
               <?php $mu = jiko_map_url($j); if($mu): ?>／<a href="<?= h($mu) ?>" target="_blank" rel="noopener">📍 地図を開く</a><?php endif; ?>
+              <?php if($can_joucho && $j['f_kubun']==='労災'): ?>／<a href="jiko_rosai_print.php?id=<?= h($j['pk_jiko_id']) ?>" target="_blank" rel="noopener">🩹 労災報告書(様式23号)の下書き</a><?php endif; ?>
             </div>
             <?php if($j['f_detail']): ?><div style="font-size:12px;color:#666;margin-top:6px;white-space:pre-wrap"><?= h($j['f_detail']) ?></div><?php endif; ?>
 
@@ -408,7 +446,7 @@ echo nav_bar();
         </div>
         <div class="form-group" style="margin:0">
           <label>事故種別</label>
-          <select name="f_kubun" id="rs_kubun" class="form-control">
+          <select name="f_kubun" id="rs_kubun" class="form-control" onchange="toggleRosaiFields(this.value,'rs_rosai')">
             <option value="労災">労災</option><option value="交通事故">交通事故</option>
             <option value="設備事故">設備事故</option><option value="ヒヤリハット">ヒヤリハット</option><option value="その他">その他</option>
           </select>
@@ -424,6 +462,26 @@ echo nav_bar();
         <div class="form-group" style="margin:0;grid-column:1/-1"><label>件名 <span style="color:#c62828">*</span></label><input type="text" name="f_title" id="rs_title" class="form-control" required></div>
         <div class="form-group" style="margin:0;grid-column:1/-1"><label>詳細</label><textarea name="f_detail" id="rs_detail" class="form-control" rows="3"></textarea></div>
       </div>
+
+      <div id="rs_rosai" style="display:none;margin-top:14px;padding:12px;background:#fff8f6;border:1px solid #f0d0c8;border-radius:6px">
+        <div style="font-size:12px;font-weight:700;color:#c62828;margin-bottom:8px">🩹 被災者情報（労災報告書の下書き用。分かる範囲でご入力ください）</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="form-group" style="margin:0"><label>被災者氏名</label><input type="text" name="f_higaisha_name" id="rs_higaisha_name" class="form-control"></div>
+          <div class="form-group" style="margin:0"><label>性別</label>
+            <select name="f_higaisha_sei" id="rs_higaisha_sei" class="form-control"><option value="">-- 未選択 --</option><option value="男">男</option><option value="女">女</option></select>
+          </div>
+          <div class="form-group" style="margin:0"><label>生年月日</label><input type="date" name="f_higaisha_seinengappi" id="rs_higaisha_seinengappi" class="form-control"></div>
+          <div class="form-group" style="margin:0"><label>職種</label><input type="text" name="f_higaisha_shokushu" id="rs_higaisha_shokushu" class="form-control"></div>
+          <div class="form-group" style="margin:0"><label>経験期間</label><input type="text" name="f_keiken_kikan" id="rs_keiken_kikan" class="form-control" placeholder="例：3年2ヶ月"></div>
+          <div class="form-group" style="margin:0"><label>傷病の部位</label><input type="text" name="f_shoubyou_bui" id="rs_shoubyou_bui" class="form-control"></div>
+          <div class="form-group" style="margin:0"><label>傷病名</label><input type="text" name="f_shoubyou_mei" id="rs_shoubyou_mei" class="form-control"></div>
+          <div class="form-group" style="margin:0"><label>休業／死亡の別</label>
+            <select name="f_kyugyo_kubun" id="rs_kyugyo_kubun" class="form-control"><option value="">-- 未選択 --</option><option value="休業見込み">休業見込み</option><option value="死亡">死亡</option></select>
+          </div>
+          <div class="form-group" style="margin:0"><label>休業見込み日数</label><input type="number" name="f_kyugyo_nissu" id="rs_kyugyo_nissu" class="form-control" min="0"></div>
+        </div>
+      </div>
+
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
         <button type="button" class="btn btn-gray btn-sm" onclick="closeResubmit()">キャンセル</button>
         <button type="submit" class="btn btn-primary btn-sm">再申請する</button>
@@ -451,8 +509,22 @@ function openResubmit(j) {
     document.getElementById('rs_place').value = j.f_place_text || '';
     document.getElementById('rs_title').value = j.f_title;
     document.getElementById('rs_detail').value = j.f_detail || '';
+    document.getElementById('rs_higaisha_name').value = j.f_higaisha_name || '';
+    document.getElementById('rs_higaisha_sei').value = j.f_higaisha_sei || '';
+    document.getElementById('rs_higaisha_seinengappi').value = j.f_higaisha_seinengappi || '';
+    document.getElementById('rs_higaisha_shokushu').value = j.f_higaisha_shokushu || '';
+    document.getElementById('rs_keiken_kikan').value = j.f_keiken_kikan || '';
+    document.getElementById('rs_shoubyou_bui').value = j.f_shoubyou_bui || '';
+    document.getElementById('rs_shoubyou_mei').value = j.f_shoubyou_mei || '';
+    document.getElementById('rs_kyugyo_kubun').value = j.f_kyugyo_kubun || '';
+    document.getElementById('rs_kyugyo_nissu').value = j.f_kyugyo_nissu || '';
+    toggleRosaiFields(j.f_kubun, 'rs_rosai');
     document.getElementById('resubmitModal').style.display = 'flex';
 }
 function closeResubmit() { document.getElementById('resubmitModal').style.display = 'none'; }
+
+function toggleRosaiFields(kubun, boxId) {
+    document.getElementById(boxId).style.display = (kubun === '労災') ? 'block' : 'none';
+}
 </script>
 <?= html_footer() ?>
