@@ -87,6 +87,11 @@ for ($i = 0; $i < 12; $i++) {
 $end_ym = end($months);
 $show_compare = isset($_GET['compare']);
 
+$target_ym = $_GET['target_ym'] ?? '';
+if (!in_array($target_ym, $months, true)) {
+    $target_ym = null; // 対象月未指定・範囲外なら、実績がある最新月を既定にする
+}
+
 /* ===================== 分類ルール ===================== */
 $rules = $pdo->query("SELECT * FROM t_keiei_bunrui_rule WHERE f_active='有効' ORDER BY f_sort_order, f_jigyobu, f_koujou")->fetchAll();
 $all_rules = $pdo->query("SELECT * FROM t_keiei_bunrui_rule ORDER BY f_sort_order, f_jigyobu, f_koujou")->fetchAll();
@@ -129,6 +134,13 @@ function keiei_rule_sum(PDO $pdo, array $rule, string $start_ym, string $end_ym)
 $jisseki = []; // rule_id => [ym => value]
 foreach ($rules as $r) {
     $jisseki[$r['pk_rule_id']] = keiei_rule_sum($pdo, $r, $start_ym, $end_ym);
+}
+
+if ($target_ym === null) {
+    foreach (array_reverse($months) as $m) {
+        foreach ($jisseki as $vals) { if (isset($vals[$m])) { $target_ym = $m; break 2; } }
+    }
+    if ($target_ym === null) $target_ym = $end_ym;
 }
 
 /* ===================== 計画・前年（手入力） ===================== */
@@ -182,7 +194,8 @@ echo nav_bar();
   <?php if($msg): ?><div class="alert alert-<?= h($msg_type) ?>"><?= h($msg) ?></div><?php endif; ?>
 
   <div class="tabs">
-    <a href="?tab=hyou" class="btn <?= $tab==='hyou'?'btn-primary':'btn-gray' ?> btn-sm">集計表</a>
+    <a href="?tab=hyou" class="btn <?= $tab==='hyou'?'btn-primary':'btn-gray' ?> btn-sm">集計表（年間）</a>
+    <a href="?tab=getsuji" class="btn <?= $tab==='getsuji'?'btn-primary':'btn-gray' ?> btn-sm">月次実績（単月・累計）</a>
     <a href="?tab=rule" class="btn <?= $tab==='rule'?'btn-primary':'btn-gray' ?> btn-sm">分類ルール（<?= count($all_rules) ?>）</a>
   </div>
 
@@ -296,6 +309,90 @@ echo nav_bar();
     document.getElementById('ruleModal').style.display = 'flex';
   }
   </script>
+
+  <?php elseif ($tab === 'getsuji'): ?>
+  <!-- ===================== 月次実績タブ（PDF2ページ目形式：単月＋累計の前年比較・計画比較） ===================== -->
+  <div class="card">
+    <div class="card-header">
+      月次実績
+      <form method="get" style="display:inline-flex;gap:8px;align-items:center">
+        <input type="hidden" name="tab" value="getsuji">
+        <label style="font-size:12px;color:#B8D4F0">累計の起点</label>
+        <input type="month" name="start_ym" value="<?= h($start_ym) ?>" class="form-control" style="width:150px;font-size:12px;padding:4px 8px">
+        <label style="font-size:12px;color:#B8D4F0">対象月</label>
+        <select name="target_ym" class="form-control" style="font-size:12px;padding:4px 8px">
+          <?php foreach ($months as $m): [$yy,$mm] = explode('-', $m); ?>
+          <option value="<?= h($m) ?>" <?= $m===$target_ym?'selected':'' ?>><?= h($yy) ?>年<?= h($mm) ?>月</option>
+          <?php endforeach; ?>
+        </select>
+        <button type="submit" class="btn btn-gray btn-sm">表示</button>
+      </form>
+    </div>
+    <div class="card-body" style="padding:0">
+      <?php if (!$rules): ?>
+      <div style="text-align:center;color:#999;padding:30px">分類ルールが登録されていません。「分類ルール」タブから追加してください。</div>
+      <?php else: ?>
+      <div class="table-wrap">
+      <table class="keiei-table">
+        <thead>
+          <tr>
+            <th rowspan="2" style="position:sticky;left:0;z-index:2;min-width:200px">事業部／工場／指標</th>
+            <th colspan="5">月次（<?= h($target_ym) ?>）</th>
+            <th colspan="6">累計（<?= h($start_ym) ?>〜<?= h($target_ym) ?>）</th>
+          </tr>
+          <tr>
+            <th>前年</th><th>計画</th><th>本年実績</th><th>前年比較</th><th>計画比較</th>
+            <th>前年</th><th>計画</th><th>本年</th><th>前年比較累計</th><th>計画比較累計</th><th>計画達成率</th>
+          </tr>
+        </thead>
+        <tbody>
+        <?php foreach ($groups as $jigyobu => $byKoujou): ?>
+          <tr class="jigyobu-row"><td colspan="12"><?= h($jigyobu) ?></td></tr>
+          <?php foreach ($byKoujou as $koujou => $ruleList): ?>
+            <?php if ($koujou !== ''): ?>
+            <tr><td class="label" style="padding-left:18px"><?= h($koujou) ?></td><?php for($i=0;$i<11;$i++) echo '<td></td>'; ?></tr>
+            <?php endif; ?>
+            <?php foreach ($ruleList as $r): $rid = $r['pk_rule_id']; $dec = $r['f_shihyo_type']==='数量' ? 1 : 0;
+              $tYear = $jisseki[$rid][$target_ym] ?? 0;
+              $tZennen = $keikaku['前年'][$rid][$target_ym] ?? 0;
+              $tKeikaku = $keikaku['計画'][$rid][$target_ym] ?? 0;
+              $tZenhi = $tYear - $tZennen;
+              $tKeikakuhi = $tYear - $tKeikaku;
+
+              $ruiku_months = array_slice($months, 0, array_search($target_ym, $months, true) + 1);
+              $rYear = 0; $rZennen = 0; $rKeikaku = 0;
+              foreach ($ruiku_months as $m) {
+                  $rYear    += $jisseki[$rid][$m] ?? 0;
+                  $rZennen  += $keikaku['前年'][$rid][$m] ?? 0;
+                  $rKeikaku += $keikaku['計画'][$rid][$m] ?? 0;
+              }
+              $rZenhi = $rYear - $rZennen;
+              $rKeikakuhi = $rYear - $rKeikaku;
+              $tassei = $rKeikaku > 0 ? round($rYear / $rKeikaku * 100) : null;
+            ?>
+            <tr class="jisseki-row">
+              <td class="label" style="padding-left:<?= $koujou!==''?'32px':'18px' ?>;position:sticky;left:0;background:#F7F9FC"><?= h($r['f_shihyo']) ?></td>
+              <td class="num"><?= number_format($tZennen, $dec) ?></td>
+              <td class="num"><?= number_format($tKeikaku, $dec) ?></td>
+              <td class="num" style="font-weight:700"><?= number_format($tYear, $dec) ?></td>
+              <td class="num" style="color:<?= $tZenhi>=0?'#1a7a3a':'#b71c1c' ?>"><?= number_format($tZenhi, $dec) ?></td>
+              <td class="num" style="color:<?= $tKeikakuhi>=0?'#1a7a3a':'#b71c1c' ?>"><?= number_format($tKeikakuhi, $dec) ?></td>
+              <td class="num"><?= number_format($rZennen, $dec) ?></td>
+              <td class="num"><?= number_format($rKeikaku, $dec) ?></td>
+              <td class="num" style="font-weight:700"><?= number_format($rYear, $dec) ?></td>
+              <td class="num" style="color:<?= $rZenhi>=0?'#1a7a3a':'#b71c1c' ?>"><?= number_format($rZenhi, $dec) ?></td>
+              <td class="num" style="color:<?= $rKeikakuhi>=0?'#1a7a3a':'#b71c1c' ?>"><?= number_format($rKeikakuhi, $dec) ?></td>
+              <td class="num"><?= $tassei!==null ? '<span class="rate-badge '.($tassei>=100?'rate-good':'rate-bad').'">'.$tassei.'%</span>' : '―' ?></td>
+            </tr>
+            <?php endforeach; ?>
+          <?php endforeach; ?>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+      </div>
+      <?php endif; ?>
+    </div>
+  </div>
 
   <?php else: ?>
   <!-- ===================== 集計表タブ ===================== -->
