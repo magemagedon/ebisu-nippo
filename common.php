@@ -166,6 +166,7 @@ function nav_bar() {
     ];
     if ($kengen === '管理者') {
         $categories['業務システム']['uriage.php'] = '経営分析';
+        $categories['業務システム']['keiei.php'] = '経営数値集計';
         $categories['業務システム']['master.php'] = 'マスタ管理';
     }
     $cat_icon = ['業務システム' => '📋', '工場管理' => '🏭', '事故報告' => '🚨'];
