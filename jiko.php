@@ -181,7 +181,7 @@ elseif ($f_status === '承認待ち')  { $where[] = "j.f_status IN ('申請中',
 elseif ($f_status === '差し戻し')  { $where[] = "j.f_status = '差し戻し'"; }
 
 $stmt = $pdo->prepare("
-    SELECT j.*, f.f_factory_name, t.f_tantosha_name,
+    SELECT j.*, f.f_factory_name, f.f_address AS factory_address, t.f_tantosha_name,
            jt.f_tantosha_name AS joucho_name, kt.f_tantosha_name AS kanri_name,
            st.f_tantosha_name AS sashimodoshi_name
     FROM t_jiko j
@@ -206,6 +206,14 @@ function jiko_kubun_badge($k) {
     $map = ['労災' => 'badge-danger', '交通事故' => 'badge-danger', '設備事故' => 'badge-warning', 'ヒヤリハット' => 'badge-info', 'その他' => 'badge-info'];
     $cls = $map[$k] ?? 'badge-info';
     return "<span class='badge {$cls}'>" . h($k) . "</span>";
+}
+
+// 事故報告の場所からGoogleマップ検索リンクを組み立てる（場所の補足 → 工場住所 → 工場名 の順で優先）
+function jiko_map_url($j) {
+    $q = trim($j['f_place_text'] ?? '');
+    if ($q === '') $q = trim($j['factory_address'] ?? '');
+    if ($q === '') $q = trim($j['f_factory_name'] ?? '');
+    return $q === '' ? '' : map_url(['f_address' => $q]);
 }
 
 echo html_header('事故報告');
@@ -309,6 +317,7 @@ echo nav_bar();
               <?php if($j['f_factory_name']): ?>／🏭 <?= h($j['f_factory_name']) ?><?php endif; ?>
               <?php if($j['f_place_text']): ?>／<?= h($j['f_place_text']) ?><?php endif; ?>
               ／👤 報告者：<?= h($j['f_tantosha_name']) ?>
+              <?php $mu = jiko_map_url($j); if($mu): ?>／<a href="<?= h($mu) ?>" target="_blank" rel="noopener">📍 地図を開く</a><?php endif; ?>
             </div>
             <?php if($j['f_detail']): ?><div style="font-size:12px;color:#666;margin-top:6px;white-space:pre-wrap"><?= h($j['f_detail']) ?></div><?php endif; ?>
 
